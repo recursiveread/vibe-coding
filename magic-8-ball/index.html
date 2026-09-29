@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<!-- v1.0 - initial build: magic 8 ball, single file, vanilla JS, no server calls -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Magic 8 Ball</title>
+  <style>
+    /* v1.0 - colors live in variables so they are easy to change in one place */
+    :root {
+      --page: #ece8f3;
+      --ink: #221d2e;
+      --ball: #0d0b12;
+      --ball-shine: #4a4560;
+      --window: #14163a;
+      --glow: #b9c6ff;
+      --accent: #4b3fa8;
+      --accent-text: #ffffff;
+      --field: #ffffff;
+      --border: #8a82a6;
+      --error: #a3162f;
+    }
+    /* Dark mode: follows the visitor's device setting */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #1b1826;
+        --ink: #ece8f3;
+        --ball-shine: #6a6488;
+        --accent: #8f83ff;
+        --accent-text: #14112a;
+        --field: #262234;
+        --border: #7d7599;
+        --error: #ff8fa3;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      padding: 4.5rem 1.5rem 1.5rem; /* extra top space so the fixed home button never covers the title */
+      background: var(--page);
+      color: var(--ink);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    h1 { margin: 0; font-size: clamp(1.4rem, 4vw, 2rem); font-weight: 600; }
+
+    /* The ball: a big dark circle with a soft highlight, sized to fit any screen */
+    .ball {
+      width: min(80vw, 24rem);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 26%, var(--ball-shine) 0%, var(--ball) 38%);
+      box-shadow: 0 1.5rem 2.5rem rgba(0, 0, 0, 0.35);
+      display: grid;
+      place-items: center;
+    }
+
+    /* The round window in the ball where the answer shows up */
+    .window {
+      width: 52%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: var(--window);
+      box-shadow: inset 0 0 1.2rem rgba(0, 0, 0, 0.8);
+      display: grid;
+      place-items: center;
+      padding: 0.8rem;
+      text-align: center;
+    }
+
+    .answer {
+      margin: 0;
+      color: var(--glow);
+      font-size: clamp(1rem, 4.6vw, 1.7rem);
+      line-height: 1.2;
+      text-wrap: balance;
+      overflow-wrap: anywhere;
+    }
+
+    /* Shake played when a question is asked (skipped for people who prefer less motion) */
+    .ball.shake { animation: shake 0.6s ease-in-out; }
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0) rotate(0); }
+      20% { transform: translate(-10px, 4px) rotate(-4deg); }
+      40% { transform: translate(10px, -4px) rotate(4deg); }
+      60% { transform: translate(-8px, 3px) rotate(-3deg); }
+      80% { transform: translate(8px, -3px) rotate(3deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ball.shake { animation: none; }
+    }
+
+    form {
+      width: min(100%, 24rem);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    label { font-size: 1.05rem; }
+
+    input, button {
+      font: inherit;
+      padding: 0.8rem 1rem;
+      border-radius: 0.6rem;
+      min-height: 3rem; /* comfortable tap size on phones */
+    }
+
+    input {
+      border: 2px solid var(--border);
+      background: var(--field);
+      color: var(--ink);
+    }
+
+    button {
+      border: 2px solid var(--accent);
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Clear keyboard focus outline */
+    input:focus-visible, button:focus-visible {
+      outline: 3px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    .error { min-height: 1.4em; margin: 0; color: var(--error); }
+  </style>
+  <!-- v1.1 - back-to-home button styles -->
+  <style>
+    /* Small, fixed link in the top-left corner so it's always easy to find */
+    .home-link {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1000;              /* keeps it above other content */
+      padding: 8px 14px;
+      background: #fff;
+      color: #1f2a44;
+      font: 600 16px/1.2 system-ui, sans-serif;
+      text-decoration: none;
+      border: 2px solid #1f2a44;
+      border-radius: 999px;
+    }
+    .home-link:hover { background: #f9d3dc; }
+
+    /* Clear purple outline when reached by keyboard */
+    .home-link:focus-visible {
+      outline: 4px solid #7b4b94;
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <!-- v1.1 - link back to the home page (one folder up from this app) -->
+  <a class="home-link" href="../index.html">&larr; Back to home</a>
+
+  <main>
+    <h1>Magic 8 Ball</h1>
+  </main>
+
+  <!-- The ball. The answer area is a live region so screen readers announce each new answer. -->
+  <div class="ball" id="ball">
+    <div class="window">
+      <p class="answer" id="answer" role="status" aria-live="polite">Ask me anything</p>
+    </div>
+  </div>
+
+  <!-- A real form, so pressing Enter in the box works the same as clicking the button -->
+  <form id="ask-form" novalidate>
+    <label for="question">Your question (Yes/No)</label>
+    <input type="text" id="question" name="question" autocomplete="off"
+           placeholder="Will it rain tomorrow?" aria-describedby="error">
+    <button type="button" id="ask-button">Ask</button>
+    <p class="error" id="error" role="alert"></p>
+  </form>
+
+  <script>
+    // v1.0 - initial build
+    // v1.2 - Ask button now uses a direct click handler (plus Enter key) and shows empty-question message in the ball
+
+    // ------------------------------------------------------------
+    // RESPONSES: edit this list to change what the ball can say.
+    // Add, remove, or reword lines. Keep each one in quotes with a comma after it.
+    // ------------------------------------------------------------
+    const RESPONSES = [
+      "Yes",
+      "No",
+      "Maybe",
+      "Try again later",
+      "Ill portents",
+      "Mysterious vibes",
+      "Be cautious",
+      "If all goes well",
+      "Please clarify",
+      "It is known"
+    ];
+
+    // Grab the page pieces we need to read from or change.
+    const form = document.getElementById("ask-form");
+    const questionInput = document.getElementById("question");
+    const answerEl = document.getElementById("answer");
+    const errorEl = document.getElementById("error");
+    const ballEl = document.getElementById("ball");
+    const askButton = document.getElementById("ask-button");
+
+    // Remember the last answer given so we can avoid repeating it twice in a row.
+    let lastIndex = -1;
+
+    // Pick a random answer from the list.
+    // If the list has more than one option, it will never pick the same one as last time.
+    function pickAnswer() {
+      let index;
+      do {
+        index = Math.floor(Math.random() * RESPONSES.length);
+      } while (index === lastIndex && RESPONSES.length > 1);
+      lastIndex = index;
+      return RESPONSES[index];
+    }
+
+    // Play the shake animation on the ball.
+    // We remove the class, force the browser to notice, then add it back
+    // so the animation can replay every time.
+    function shakeBall() {
+      ballEl.classList.remove("shake");
+      void ballEl.offsetWidth;
+      ballEl.classList.add("shake");
+    }
+
+    // Does the actual asking. Runs when the "Ask" button is clicked or Enter is pressed.
+    function handleAsk() {
+      // If the question box is empty, tell the person right in the ball (easy to see)
+      // and also under the button, then put the cursor back in the box.
+      if (questionInput.value.trim() === "") {
+        answerEl.textContent = "Type a question first";
+        errorEl.textContent = "Type a question first, then press Ask.";
+        questionInput.focus();
+        return;
+      }
+
+      // Question is fine: clear any old error, shake the ball, and show a new answer.
+      errorEl.textContent = "";
+      shakeBall();
+      answerEl.textContent = pickAnswer();
+    }
+
+    // Clicking the Ask button asks the question.
+    askButton.addEventListener("click", handleAsk);
+
+    // Pressing Enter inside the question box asks the question too.
+    questionInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleAsk();
+      }
+    });
+
+    // Safety net: if the form is ever submitted another way, stop the page from reloading.
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+    });
+
+    // Clear the error message as soon as the person starts typing again.
+    questionInput.addEventListener("input", function () {
+      errorEl.textContent = "";
+    });
+  </script>
+</body>
+</html>
