@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<!-- v1.0 - initial build: home page linking to Julia's six small web apps -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Makes the page scale properly on phones instead of looking zoomed out -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Julia's Little Corner of the Web</title>
+  <meta name="description" content="Julia's home page: small web apps built while learning to code with AI.">
+
+  <!-- Two friendly Google Fonts. If they can't load, the fallback fonts below kick in. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Nunito:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* v1.0 - styles */
+
+    /* ---------- Colors and sizes live here so they're easy to change ---------- */
+    :root {
+      --paper: #f3f7f8;        /* soft blue-grey page background */
+      --ink: #1f2a44;          /* dark navy for text (strong contrast on the paper color) */
+      --ink-soft: #46516b;     /* slightly lighter navy for secondary text */
+      --teal: #cfeee9;         /* paint swatch colors, one per project card */
+      --plum: #e4d5f0;
+      --butter: #fbe9b7;
+      --blush: #f9d3dc;
+      --sky: #d0e4f7;
+      --mint: #d6efc9;
+      --focus: #7b4b94;        /* purple outline shown when you tab to a link */
+      --radius: 22px;
+    }
+
+    /* Include padding and borders inside an element's width so layouts don't overflow */
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Nunito", system-ui, sans-serif;
+      font-size: 1.125rem;
+      line-height: 1.6;
+      color: var(--ink);
+      background: var(--paper);
+    }
+
+    /* ---------- Skip link: lets keyboard users jump past the intro ---------- */
+    .skip-link {
+      position: absolute;
+      left: 1rem;
+      top: -4rem;              /* hidden above the screen until focused */
+      background: var(--ink);
+      color: #fff;
+      padding: .6rem 1rem;
+      border-radius: 10px;
+      z-index: 10;
+    }
+    .skip-link:focus { top: 1rem; }
+
+    /* ---------- Header / intro ---------- */
+    header {
+      position: relative;
+      overflow: hidden;        /* keeps the paint blobs from causing sideways scrolling */
+      padding: 4rem 1.5rem 3rem;
+    }
+
+    /* Soft blurry "watercolor" blobs behind the title, made from plain CSS gradients */
+    header::before {
+      content: "";
+      position: absolute;
+      inset: -20% -10% auto -10%;
+      height: 120%;
+      background:
+        radial-gradient(circle at 15% 30%, var(--blush) 0 18%, transparent 45%),
+        radial-gradient(circle at 80% 20%, var(--sky) 0 20%, transparent 48%),
+        radial-gradient(circle at 55% 80%, var(--butter) 0 16%, transparent 44%);
+      opacity: .9;
+      z-index: 0;
+    }
+
+    .intro {
+      position: relative;      /* sits above the blobs */
+      z-index: 1;
+      max-width: 40rem;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      font-weight: 800;
+      font-size: clamp(2.2rem, 7vw, 3.75rem);   /* grows with screen size, within limits */
+      line-height: 1.1;
+      margin: 0 0 1rem;
+    }
+
+    .greeting {
+      font-weight: 600;
+      color: var(--ink-soft);
+      margin: 0 0 .5rem;
+    }
+
+    .intro p { margin: 0 0 1rem; max-width: 34rem; }
+
+    /* ---------- Project grid ---------- */
+    main { padding: 1rem 1.5rem 4rem; }
+
+    h2 {
+      font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      font-size: 1.75rem;
+      max-width: 60rem;
+      margin: 0 auto 1.25rem;
+    }
+
+    /* Auto-fitting grid: 1 column on phones, 2 on tablets, 3 on desktops */
+    .projects {
+      list-style: none;
+      margin: 0 auto;
+      padding: 0;
+      max-width: 60rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+      gap: 1.25rem;
+    }
+
+    /* Each whole card is one big link, which is easy to tap and easy to tab to */
+    .card {
+      display: block;
+      height: 100%;
+      padding: 1.5rem;
+      border-radius: var(--radius);
+      color: var(--ink);
+      text-decoration: none;
+      background: var(--swatch);
+      border: 2px solid transparent;
+      transition: transform .2s ease, border-color .2s ease;
+    }
+    .card:hover { transform: translateY(-4px); border-color: var(--ink); }
+
+    .card .icon { font-size: 2rem; display: block; margin-bottom: .5rem; }
+
+    .card h3 {
+      font-family: "Bricolage Grotesque", system-ui, sans-serif;
+      font-size: 1.35rem;
+      margin: 0 0 .25rem;
+    }
+
+    .card p { margin: 0; font-size: 1rem; }
+
+    /* Give each card its own paint color by setting the --swatch variable */
+    .c-pomodoro  { --swatch: var(--teal); }
+    .c-countdown { --swatch: var(--butter); }
+    .c-qr        { --swatch: var(--sky); }
+    .c-paint     { --swatch: var(--plum); }
+    .c-cats      { --swatch: var(--blush); }
+    .c-recipes   { --swatch: var(--mint); }
+
+    /* ---------- Keyboard focus: a thick, obvious outline ---------- */
+    a:focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem 1.5rem 3rem;
+      color: var(--ink-soft);
+      font-size: 1rem;
+    }
+
+    /* ---------- Respect people who turn off animations in their device settings ---------- */
+    @media (prefers-reduced-motion: reduce) {
+      .card { transition: none; }
+      .card:hover { transform: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Skip link: first thing a keyboard user tabs to -->
+  <a class="skip-link" href="#projects">Skip to projects</a>
+
+  <header>
+    <div class="intro">
+      <!-- The greeting text is filled in by the JavaScript at the bottom of the page -->
+      <p class="greeting" id="greeting">Hi there!</p>
+      <h1>Hi, I'm Julia. Welcome to my little corner of the web.</h1>
+      <p>I'm learning to code with a little help from AI, and this is where I keep the small apps I've built along the way. Timers, cats, paintings, and snacks.</p>
+      <p>Poke around, click anything, and have fun.</p>
+    </div>
+  </header>
+
+  <main>
+    <h2 id="projects-heading">Things I've made</h2>
+
+    <!-- The list of links. Screen readers announce "list, 6 items", which helps navigation. -->
+    <ul class="projects" id="projects" aria-labelledby="projects-heading">
+      <li>
+        <a class="card c-pomodoro" href="pomodoro/">
+          <span class="icon" aria-hidden="true">🍅</span>
+          <h3>Pomodoro Timer</h3>
+          <p>Focus in short bursts, then take a break.</p>
+        </a>
+      </li>
+      <li>
+        <a class="card c-countdown" href="countdown/">
+          <span class="icon" aria-hidden="true">🎂</span>
+          <h3>Birthday Countdown</h3>
+          <p>How many days until my birthday?</p>
+        </a>
+      </li>
+      <li>
+        <a class="card c-qr" href="qr-code/">
+          <span class="icon" aria-hidden="true">📱</span>
+          <h3>QR Code Generator</h3>
+          <p>Turn any link or text into a QR code.</p>
+        </a>
+      </li>
+      <li>
+        <a class="card c-paint" href="my-page/">
+          <span class="icon" aria-hidden="true">🎨</span>
+          <h3>Watercolor Paintings</h3>
+          <p>A look at my watercolor art.</p>
+        </a>
+      </li>
+      <li>
+        <a class="card c-cats" href="pictures/">
+          <span class="icon" aria-hidden="true">🐱</span>
+          <h3>Cat Card Slider</h3>
+          <p>Flip through pictures of my cats.</p>
+        </a>
+      </li>
+      <li>
+        <a class="card c-recipes" href="recipe/">
+          <span class="icon" aria-hidden="true">🍲</span>
+          <h3>Recipes</h3>
+          <p>Something tasty to cook.</p>
+        </a>
+      </li>
+    </ul>
+  </main>
+
+  <footer>
+    <!-- The year is filled in by the JavaScript below so it never goes out of date -->
+    <p>Made by Julia, <span id="year">2026</span>. Nothing on this page collects your data.</p>
+  </footer>
+
+  <script>
+    // v1.0 - initial build
+
+    // Wait until the whole page has loaded before touching any elements.
+    // This makes sure the greeting and year elements exist when we look for them.
+    document.addEventListener("DOMContentLoaded", function () {
+
+      // ---------- Block 1: friendly greeting based on the time of day ----------
+
+      // Find the greeting paragraph in the header using its id.
+      var greetingElement = document.getElementById("greeting");
+
+      // Ask the visitor's device what hour it is right now (0 = midnight, 23 = 11pm).
+      var hour = new Date().getHours();
+
+      // This variable will hold the words we want to show.
+      var greetingText;
+
+      // Pick a greeting depending on the hour.
+      if (hour < 5) {
+        greetingText = "Up late? Welcome!";
+      } else if (hour < 12) {
+        greetingText = "Good morning!";
+      } else if (hour < 18) {
+        greetingText = "Good afternoon!";
+      } else {
+        greetingText = "Good evening!";
+      }
+
+      // Put the chosen words into the page. If the element is missing, do nothing.
+      if (greetingElement) {
+        greetingElement.textContent = greetingText;
+      }
+
+      // ---------- Block 2: keep the footer year up to date ----------
+
+      // Find the little span in the footer that holds the year.
+      var yearElement = document.getElementById("year");
+
+      // Replace the placeholder year with the current one from the visitor's device.
+      if (yearElement) {
+        yearElement.textContent = new Date().getFullYear();
+      }
+    });
+  </script>
+</body>
+</html>
