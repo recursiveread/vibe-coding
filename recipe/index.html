@@ -862,6 +862,28 @@
 
   });
 </script>
+<style>
+  /* Small, fixed link in the top-left corner so it's always easy to find */
+  .home-link {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1000;              /* keeps it above other content */
+    padding: 8px 14px;
+    background: #fff;
+    color: #1f2a44;
+    font: 600 16px/1.2 system-ui, sans-serif;
+    text-decoration: none;
+    border: 2px solid #1f2a44;
+    border-radius: 999px;
+  }
+  .home-link:hover { background: #f9d3dc; }
 
+  /* Clear purple outline when reached by keyboard */
+  .home-link:focus-visible {
+    outline: 4px solid #7b4b94;
+    outline-offset: 3px;
+  }
+</style>
 </body>
 </html>
