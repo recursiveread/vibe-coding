@@ -85,6 +85,19 @@
       overflow-wrap: anywhere;
     }
 
+    /* v1.3 - answer floats up from the depths: starts low, blurry and faint, then rises into focus */
+    .answer.surface { animation: surface 1.8s ease-out both; }
+    @keyframes surface {
+      0%   { opacity: 0; transform: translateY(1.6rem) scale(0.85); filter: blur(6px); }
+      60%  { opacity: 0.7; filter: blur(2px); }
+      100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    }
+    /* For people who prefer less motion, use a plain gentle fade with no movement */
+    @media (prefers-reduced-motion: reduce) {
+      .answer.surface { animation: fade 1s ease-out both; }
+      @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    }
+
     /* Shake played when a question is asked (skipped for people who prefer less motion) */
     .ball.shake { animation: shake 0.6s ease-in-out; }
     @keyframes shake {
@@ -187,6 +200,7 @@
 
   <script>
     // v1.0 - initial build
+    // v1.3 - answer fades in like it is floating up to the surface
     // v1.2 - Ask button now uses a direct click handler (plus Enter key) and shows empty-question message in the ball
 
     // ------------------------------------------------------------
@@ -237,6 +251,14 @@
       ballEl.classList.add("shake");
     }
 
+    // Play the "floating up to the surface" fade on the answer text.
+    // Same trick as the shake: remove the class, force a refresh, add it back so it replays.
+    function floatAnswerUp() {
+      answerEl.classList.remove("surface");
+      void answerEl.offsetWidth;
+      answerEl.classList.add("surface");
+    }
+
     // Does the actual asking. Runs when the "Ask" button is clicked or Enter is pressed.
     function handleAsk() {
       // If the question box is empty, tell the person right in the ball (easy to see)
@@ -252,6 +274,7 @@
       errorEl.textContent = "";
       shakeBall();
       answerEl.textContent = pickAnswer();
+      floatAnswerUp();
     }
 
     // Clicking the Ask button asks the question.
