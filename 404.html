@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<!-- v1.1 - removed the big number from the page; added a soft magnifier icon -->
+<!-- v1.0 - initial build: friendly page-not-found page, single file, no external requests -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page not found</title>
+  <meta name="description" content="Sorry, we couldn't find that page. Head back to the home page.">
+  <meta name="robots" content="noindex">
+  <style>
+    /* v1.0 - colour tokens: soft stone background, deep sage for the main action */
+    :root {
+      --bg: #e8edeb;
+      --panel: #f6f8f7;
+      --text: #2b3736;
+      --muted: #566664;
+      --accent: #3b6a62;        /* button background (white text = ~6:1 contrast) */
+      --accent-hover: #2f5851;
+      --accent-text: #ffffff;
+      --numeral: #b9cbc6;       /* soft icon colour */
+      --focus: #1d4ed8;
+    }
+    /* Follow the visitor's device setting for dark mode */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c2524;
+        --panel: #253130;
+        --text: #e3ebe9;
+        --muted: #a5b6b3;
+        --accent: #a9d3c9;
+        --accent-hover: #c2e3da;
+        --accent-text: #14211f;
+        --numeral: #3a4c49;
+        --focus: #93c5fd;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 1.5rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-rounded, "Nunito", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      width: 100%;
+      max-width: 34rem;
+      padding: clamp(2rem, 6vw, 3.5rem) clamp(1.5rem, 5vw, 3rem);
+      background: var(--panel);
+      border-radius: 1.5rem;
+      text-align: center;
+    }
+
+    /* Soft magnifier icon sets a gentle tone without shouting */
+    .icon {
+      width: clamp(5rem, 22vw, 7rem);
+      height: auto;
+      margin: 0 auto 0.5rem;
+      display: block;
+      color: var(--numeral);
+    }
+
+    h1 {
+      margin: 0.5rem 0 0.75rem;
+      font-size: clamp(1.6rem, 5vw, 2.1rem);
+      line-height: 1.25;
+    }
+
+    p { margin: 0 0 1.5rem; color: var(--muted); font-size: 1.1rem; }
+
+    /* Shows which address was requested; hidden until JavaScript fills it in */
+    .requested {
+      margin: -0.5rem 0 1.5rem;
+      font-size: 0.95rem;
+      overflow-wrap: anywhere;
+    }
+    .requested[hidden] { display: none; }
+    .requested code {
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.4rem;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* The home link: big, high contrast, easy to tap (well over 44px tall) */
+    .home-link {
+      display: inline-block;
+      padding: 1rem 2rem;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-size: 1.2rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .home-link:hover { background: var(--accent-hover); }
+
+    /* Clear keyboard focus ring for every interactive element */
+    a:focus-visible, button:focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    /* Secondary action: plain text button */
+    .back {
+      display: block;
+      margin: 1.25rem auto 0;
+      padding: 0.5rem 1rem;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      font: inherit;
+      font-size: 1rem;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .back:hover { color: var(--text); }
+    .back[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <main aria-labelledby="title">
+    <!-- Decorative only, so it is hidden from screen readers -->
+    <svg class="icon" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" aria-hidden="true" focusable="false">
+      <circle cx="42" cy="42" r="26"/>
+      <line x1="61" y1="61" x2="86" y2="86"/>
+    </svg>
+    <h1 id="title">We can't find that page</h1>
+    <p>The page may have moved, or the link may have a typo. Nothing is broken on your end.</p>
+
+    <!-- Filled in by the script below; stays hidden if the address can't be read -->
+    <p class="requested" id="requested" hidden>You asked for: <code id="requested-path"></code></p>
+
+    <a class="home-link" href="https://recursiveread.github.io/vibe-coding/">Go to the home page</a>
+
+    <!-- Only shown when there is a page to go back to -->
+    <button class="back" id="back" type="button" hidden>Or go back to the previous page</button>
+  </main>
+
+  <script>
+    // v1.0 - initial build
+    // Wrapped in a function so our variables don't leak into the page's global space.
+    (function () {
+      'use strict';
+
+      // BLOCK 1: Show the address the visitor asked for.
+      // We read the path from the browser's address bar (nothing is sent anywhere)
+      // and place it on the page as plain text. Using textContent means any odd
+      // characters in the address can never be treated as code.
+      var requestedBox = document.getElementById('requested');
+      var requestedPath = document.getElementById('requested-path');
+      try {
+        var path = window.location.pathname;
+        if (requestedBox && requestedPath && path && path !== '/') {
+          requestedPath.textContent = path;
+          requestedBox.hidden = false; // reveal the line now that it has content
+        }
+      } catch (e) {
+        // If the address can't be read, we simply leave the line hidden.
+      }
+
+      // BLOCK 2: Set up the "go back" button.
+      // The browser keeps a list of pages the visitor has seen. If that list has
+      // more than one entry, there is somewhere to go back to, so we show the
+      // button and make it step back one page when clicked or activated by keyboard.
+      var backButton = document.getElementById('back');
+      if (backButton && window.history.length > 1) {
+        backButton.hidden = false;
+        backButton.addEventListener('click', function () {
+          window.history.back();
+        });
+      }
+    })();
+  </script>
+</body>
+</html>
