@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <!--
   Oatmeal Chocolate Chip Cookies — Recipe Card
+  v1.4 — added the "Back to home" link (the styles were there but the link itself was missing)
+  v1.3 — removed the "A cookie jar favorite" line above the title
+  v1.2 — added an acknowledgement + link to Sally's Baking Addiction
+         (the source of the recipe) under the recipe header
   v1.1 — added a shared top navigation row linking to notes.html;
          file renamed to index.html
 
@@ -199,6 +203,28 @@
   .recipe-meta strong {
     color: var(--cocoa);
     font-weight: 700;
+  }
+
+  /* ---------- Recipe credit (acknowledgement of the source) ----------
+     A small, quiet line under the recipe details thanking the original
+     recipe author, with a link back to their site. */
+  .recipe-credit {
+    margin: 14px 0 0;
+    font-size: 0.88rem;
+    color: var(--cocoa-soft);
+  }
+
+  .recipe-credit a {
+    color: var(--cinnamon);
+    font-weight: 700;
+    text-decoration: underline;
+    text-decoration-color: var(--cinnamon-dim);
+    text-underline-offset: 3px;
+  }
+
+  .recipe-credit a:hover {
+    color: var(--cocoa);
+    text-decoration-color: var(--cocoa-soft);
   }
 
   /* ---------- Photo ---------- */
@@ -475,9 +501,9 @@
   }
 
   /* ---------- Top page navigation (shared row on both pages) ----------
-     A small row of two tabs — "Recipe" and "Notes" — so either page
-     can be reached from either page. The current page is shown as
-     plain highlighted text (not a link, since it's already where you
+     A small row of two tabs — "Recipe" and "Notes" — so either
+     page can be reached from either page. The current page is shown
+     as plain highlighted text (not a link, since it's already where you
      are); the other page is a real link. */
   .page-nav {
     display: flex;
@@ -542,6 +568,9 @@
 </head>
 <body>
 
+  <!-- Fixed "Back to home" link (styled in the .home-link rules at the bottom of this file) -->
+  <a class="home-link" href="../">← Back to home</a>
+
   <!--
     The whole recipe is wrapped in a single <main> landmark with an
     accessible name pulled from the recipe title (via aria-labelledby),
@@ -563,13 +592,17 @@
 
       <!-- ============ HEADER ============ -->
       <header class="recipe-header">
-        <span class="recipe-eyebrow">A cookie jar favorite</span>
         <h1 class="recipe-title" id="recipe-title">Oatmeal Chocolate Chip Cookies</h1>
         <p class="recipe-meta">
           <span><strong>Makes:</strong>&nbsp;32–35 cookies</span>
           <span><strong>Chill:</strong>&nbsp;45 min+</span>
           <span><strong>Bake:</strong>&nbsp;13–14 min</span>
           <span><strong>Oven:</strong>&nbsp;350°F (177°C)</span>
+        </p>
+        <!-- Acknowledgement of where this recipe comes from, with a link
+             back to the original recipe on Sally's Baking Addiction. -->
+        <p class="recipe-credit">
+          Recipe from <a href="https://sallysbakingaddiction.com/oatmeal-chocolate-chip-cookies/" target="_blank" rel="noopener">Sally's Baking Addiction</a>.
         </p>
       </header>
 
@@ -864,6 +897,9 @@
 </script>
   
 <style>
+  /* Extra room at the top of the page so the fixed link never covers the card */
+  body { padding-top: 4.5rem; }
+
   /* Small, fixed link in the top-left corner so it's always easy to find */
   .home-link {
     position: fixed;
