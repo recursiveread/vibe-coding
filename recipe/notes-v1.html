@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<!--
+  Oatmeal Chocolate Chip Cookies — Baking Notes
+  v1.0 — initial build
+
+  WHAT THIS FILE IS:
+  A second, self-contained page (HTML + CSS all in this one file) that
+  holds a few longer paragraphs of notes about the recipe. It shares
+  the same card layout, color palette, and fonts as the main recipe
+  page ("oatmeal-chocolate-chip-cookies.html") so the two feel like
+  one connected site, and it links back to that page at the bottom.
+
+  Keep this file in the SAME FOLDER as "oatmeal-chocolate-chip-cookies.html"
+  so the link between the two pages works.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Baking Notes — Oatmeal Chocolate Chip Cookies</title>
+
+<!-- Same two Google Fonts as the recipe page, so headings and body
+     text match exactly between both pages. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ==========================================================
+     DESIGN TOKENS
+     Identical values to the recipe page's tokens, so switching
+     between the two pages feels seamless rather than like landing
+     on a different site.
+     ========================================================== */
+  :root {
+    --cream:        #FAF3E4;
+    --card:         #FFFDF8;
+    --oat:          #E7D3AA;
+    --cocoa:        #4A2E1F;
+    --cocoa-soft:   #7A5A44;
+    --choc:         #2A1810;
+    --cinnamon:     #B5651D;
+    --cinnamon-dim: #E8C9A3;
+    --line:         rgba(74, 46, 31, 0.16);
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body:    'Karla', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --radius-card: 22px;
+
+    --shadow-card: 0 30px 60px -25px rgba(42, 24, 16, 0.35),
+                   0 2px 6px rgba(42, 24, 16, 0.08);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* ==========================================================
+     RESET & BASE PAGE LAYOUT
+     Same centered-card approach as the recipe page.
+     ========================================================== */
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--cream);
+    background-image: radial-gradient(var(--oat) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--choc);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(16px, 4vw, 48px);
+  }
+
+  a:focus-visible,
+  button:focus-visible {
+    outline: 3px solid var(--cinnamon);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ==========================================================
+     THE NOTES CARD
+     Same card treatment (surface, shadow, radius, entrance
+     animation) as the recipe card, so it reads as the same
+     object continued on a second page.
+     ========================================================== */
+  .notes-card {
+    width: 100%;
+    max-width: 620px;
+    background: var(--card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    animation: riseIn 0.7s ease-out both;
+  }
+
+  @keyframes riseIn {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card-inner {
+    padding: clamp(22px, 5vw, 44px);
+  }
+
+  /* ---------- Header ---------- */
+  .notes-header {
+    text-align: center;
+    padding-bottom: 22px;
+  }
+
+  .notes-eyebrow {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--cocoa-soft);
+    margin-bottom: 6px;
+  }
+
+  .notes-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.8rem, 5vw, 2.5rem);
+    line-height: 1.15;
+    color: var(--cocoa);
+    margin: 0;
+  }
+
+  /* ---------- Notes body ---------- */
+  .notes-section {
+    margin-top: 26px;
+  }
+
+  .notes-section:first-of-type {
+    margin-top: 0;
+  }
+
+  .section-heading {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 1.35rem;
+    color: var(--cocoa);
+    margin: 0 0 14px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+  }
+
+  .notes-section p {
+    line-height: 1.7;
+    color: var(--choc);
+    margin: 0 0 16px;
+  }
+
+  .notes-section p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Placeholder text is styled the same as any other paragraph,
+     so this page looks and reads exactly like the finished
+     product once the placeholders are replaced with real notes. */
+
+  /* ---------- Footer + link back ---------- */
+  .notes-footer {
+    margin-top: 30px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+  }
+
+  .notes-footer a {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--cinnamon);
+    text-decoration: underline;
+    text-decoration-color: var(--cinnamon-dim);
+    text-underline-offset: 3px;
+  }
+
+  .notes-footer a:hover {
+    color: var(--cocoa);
+    text-decoration-color: var(--cocoa-soft);
+  }
+</style>
+</head>
+<body>
+
+  <!--
+    Same landmark pattern as the recipe page: one <main> region named
+    after the page's own heading, so screen-reader users land on
+    "Baking Notes" rather than a generic region.
+  -->
+  <main class="notes-card" aria-labelledby="notes-title">
+    <div class="card-inner">
+
+      <!-- ============ HEADER ============ -->
+      <header class="notes-header">
+        <span class="notes-eyebrow">Oatmeal Chocolate Chip Cookies</span>
+        <h1 class="notes-title" id="notes-title">Baking Notes</h1>
+      </header>
+
+      <!-- ============ NOTES ============
+           Replace the placeholder paragraphs below with real notes
+           about the recipe — substitutions, texture tips, storage,
+           whatever's worth remembering next time it's baked. -->
+      <section class="notes-section" aria-labelledby="notes-heading">
+        <h2 class="section-heading" id="notes-heading">A few thoughts on this recipe</h2>
+        <p>[Write a paragraph here — for example, what makes this version of the recipe different from others, or what drew you to it in the first place.]</p>
+        <p>[Write a paragraph here — for example, any substitutions you've tried, such as swapping the chocolate chips for chunks, adding nuts, or using a different sugar ratio, and how each one turned out.]</p>
+        <p>[Write a paragraph here — for example, texture notes: how long to chill the dough for a chewier vs. crispier cookie, or how the bake time changes at different altitudes or with different pans.]</p>
+        <p>[Write a paragraph here — for example, storage tips, freezing the dough for later, or how these cookies hold up over a few days.]</p>
+      </section>
+
+      <!-- ============ LINK BACK TO THE RECIPE ============ -->
+      <footer class="notes-footer">
+        <a href="index.html">Back to the recipe</a>
+      </footer>
+
+    </div>
+  </main>
+
+</body>
+</html>

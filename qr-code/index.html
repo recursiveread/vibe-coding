@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QR Code Generator</title>
+
+<!--
+  ============================================================
+  QR CODE GENERATOR
+  ============================================================
+  v1.0 - initial build
+
+  WHAT THIS FILE IS:
+  A single, self-contained HTML file. Open it in any browser
+  and it works — no server, no build step, no installation.
+
+  HOW IT WORKS:
+  1. The user types a URL into a text field.
+  2. JavaScript checks that the URL is valid.
+  3. A QR code image is drawn onto the page using the QRCode.js
+     library (loaded from a CDN below).
+  4. The user can download the generated QR code as a PNG.
+
+  PRIVACY NOTE:
+  The URL the user types is never sent anywhere. The QR code
+  image is generated entirely inside the browser using
+  JavaScript running on the user's own device. The only network
+  request this page makes is the one-time download of the
+  QRCode.js library file itself (just code, not user data).
+  ============================================================
+-->
+
+<!-- CDN LIBRARY: QRCode.js — a small vanilla-JS library that draws
+     QR codes onto a <canvas> or <img> element. No framework needed. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<style>
+  /* ============================================================
+     v1.0 - DESIGN TOKENS
+     Centralized color/spacing values so the whole page's look
+     can be adjusted from one place.
+     ============================================================ */
+  :root {
+    --paper: #F7F6F2;       /* page background */
+    --surface: #FFFEFB;      /* input/card background */
+    --ink: #1F2A24;          /* primary text color */
+    --ink-soft: #6B6A5E;     /* secondary/muted text */
+    --line: #C9C3B4;         /* borders */
+    --moss: #4B6358;         /* primary action color */
+    --moss-dark: #35473F;    /* primary action color, hover/active */
+    --error: #A6432E;        /* error text color */
+    --focus-ring: #2F6E5A;   /* keyboard focus outline color */
+  }
+
+  /* Reset box sizing globally so padding/border never break layout math */
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Respect users who have asked their OS/browser to reduce motion */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    min-height: 100vh;
+    /* Flexbox centers the card both horizontally and vertically,
+       and re-centers automatically as the viewport size changes. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    line-height: 1.5;
+  }
+
+  /* Visible focus outline for anyone navigating by keyboard (Tab key).
+     Applied to every interactive element so nothing is a silent trap. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.02em;
+    color: var(--moss-dark);
+    margin-bottom: 6px;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    letter-spacing: -0.01em;
+  }
+
+  .sub {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 0 0 28px 0;
+  }
+
+  /* ============================================================
+     FORM STYLES
+     ============================================================ */
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  label {
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  /* The input and button are visually grouped into one row on
+     wider screens, and stack on very narrow screens (see the
+     media query near the bottom of this stylesheet). */
+  .input-row {
+    display: flex;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    transition: border-color 0.15s ease;
+  }
+
+  .input-row:focus-within {
+    border-color: var(--moss);
+  }
+
+  input[type="url"] {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 12px 14px;
+    font-family: inherit;
+    font-size: 16px; /* 16px prevents iOS Safari from auto-zooming on focus */
+    color: var(--ink);
+    outline: none;
+    min-width: 0; /* allows the input to shrink below its content size */
+  }
+
+  input[type="url"]::placeholder {
+    color: #A9A79A;
+  }
+
+  button {
+    border: none;
+    background: var(--moss);
+    color: var(--paper);
+    padding: 12px 18px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+  }
+
+  button:hover {
+    background: var(--moss-dark);
+  }
+
+  button:active {
+    transform: translateY(1px);
+  }
+
+  /* The color picker sits in its own row: a label, the native
+     color swatch input, and a text readout of the current hex value. */
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  input[type="color"] {
+    /* Native color inputs render very differently across browsers.
+       These rules strip most of that default chrome so the swatch
+       matches the rest of the form's boxy, bordered look. */
+    -webkit-appearance: none;
+    appearance: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 4px;
+  }
+
+  input[type="color"]::-webkit-color-swatch {
+    border: none;
+  }
+
+  input[type="color"]::-moz-color-swatch {
+    border: none;
+  }
+
+  .color-value {
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+  }
+
+  /* Error text is always present in the DOM (for screen readers to
+     find reliably) but visually empty until JavaScript fills it in. */
+  .error-text {
+    font-size: 12px;
+    color: var(--error);
+    min-height: 16px;
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     RESULT AREA (the generated QR code + download link)
+     ============================================================ */
+  .result {
+    margin-top: 28px;
+    border-top: 1px solid var(--line);
+    padding-top: 28px;
+    display: none; /* hidden until a QR code has been generated */
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .result.visible {
+    display: flex;
+  }
+
+  #qrcode-output {
+    padding: 16px;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    line-height: 0; /* removes extra space under the inline canvas/img */
+    max-width: 100%;
+  }
+
+  /* The QRCode.js library draws a fixed-size canvas or image; this
+     rule lets it shrink on very small screens instead of overflowing. */
+  #qrcode-output canvas,
+  #qrcode-output img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .result-url {
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    word-break: break-all; /* long URLs wrap instead of overflowing the card */
+    max-width: 100%;
+  }
+
+  .download-link {
+    font-size: 12px;
+    color: var(--moss-dark);
+    text-decoration: none;
+    border-bottom: 1px solid var(--moss-dark);
+    padding-bottom: 1px;
+  }
+
+  .download-link:hover {
+    color: var(--moss);
+    border-color: var(--moss);
+  }
+
+  /* A visually hidden helper class: keeps content available to screen
+     readers (like status announcements) without showing it on screen. */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ============================================================
+     RESPONSIVE BREAKPOINTS
+     Phone: default styles above already work at narrow widths.
+     Below ~380px, stack the input and button instead of a row,
+     since some phones are narrower than the button needs.
+     ============================================================ */
+  @media (max-width: 380px) {
+    .input-row {
+      flex-direction: column;
+    }
+
+    button {
+      padding: 12px;
+    }
+  }
+
+  /* Tablet and up: give the card a little more breathing room. */
+  @media (min-width: 768px) {
+    .card {
+      max-width: 460px;
+    }
+
+    h1 {
+      font-size: 22px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <!-- ============================================================
+       PAGE HEADER
+       Plain descriptive heading — screen readers announce <h1>
+       first, so it should say exactly what this page does.
+       ============================================================ -->
+  <p class="eyebrow">// tool</p>
+  <h1>QR Code Generator</h1>
+  <p class="sub" id="page-description">Paste a URL, get a scannable code back. Nothing leaves your browser.</p>
+
+  <!-- ============================================================
+       FORM
+       A real <form> element is used (not just a div with a click
+       handler) so that pressing Enter in the text field submits it,
+       which is standard keyboard behavior people expect.
+       ============================================================ -->
+  <form id="qr-form" aria-describedby="page-description">
+
+    <label for="url-input">URL to convert</label>
+
+    <div class="input-row">
+      <!--
+        type="url" gives mobile browsers a keyboard with "/" and ".com"
+        shortcuts, and enables basic built-in browser validation.
+        aria-invalid and aria-describedby are updated by JavaScript
+        when validation fails, so screen readers announce the error.
+      -->
+      <input
+        type="url"
+        id="url-input"
+        name="url-input"
+        placeholder="https://example.com"
+        autocomplete="off"
+        autofocus
+        aria-invalid="false"
+        aria-describedby="error-text"
+      >
+      <button type="submit">Generate</button>
+    </div>
+
+    <!-- ============================================================
+         COLOR PICKER
+         Lets the user choose the QR code's foreground color. The
+         background stays fixed and white (in code below) so the
+         code keeps enough contrast to remain scannable.
+         ============================================================ -->
+    <div class="color-row">
+      <label for="color-input">QR code color</label>
+      <input
+        type="color"
+        id="color-input"
+        name="color-input"
+        value="#1E3A8A"
+        aria-describedby="color-value"
+      >
+      <span class="color-value" id="color-value">#1E3A8A</span>
+    </div>
+
+    <!--
+      role="alert" + aria-live="polite" means a screen reader will
+      automatically announce this text the moment JavaScript fills
+      it in, without the user needing to navigate to it manually.
+    -->
+    <p class="error-text" id="error-text" role="alert" aria-live="polite"></p>
+  </form>
+
+  <!-- ============================================================
+       RESULT AREA
+       aria-live="polite" announces "QR code generated" to screen
+       reader users once it appears, since it's added dynamically
+       and wouldn't otherwise be noticed.
+       ============================================================ -->
+  <div class="result" id="result" aria-live="polite">
+    <div id="qrcode-output" role="img" aria-label="QR code image for the entered URL"></div>
+    <p class="result-url" id="result-url"></p>
+    <a class="download-link" id="download-link" download="qr-code.png">Download PNG</a>
+  </div>
+
+</div>
+
+<script>
+  // ============================================================
+  // v1.0 - initial build
+  // QR CODE GENERATOR — APPLICATION LOGIC
+  // ============================================================
+  // This script:
+  //   1. Grabs references to the HTML elements we need to read from
+  //      or write to.
+  //   2. Listens for the form being submitted.
+  //   3. Validates whatever the user typed.
+  //   4. If valid, draws a QR code and sets up a PNG download link.
+  //   5. If invalid, shows an accessible error message instead.
+  // ============================================================
+
+  // --- STEP 1: Get references to the HTML elements we'll interact with ---
+  const form = document.getElementById('qr-form');
+  const input = document.getElementById('url-input');
+  const errorText = document.getElementById('error-text');
+  const result = document.getElementById('result');
+  const resultUrl = document.getElementById('result-url');
+  const downloadLink = document.getElementById('download-link');
+  const qrContainer = document.getElementById('qrcode-output');
+  const colorInput = document.getElementById('color-input');
+  const colorValueLabel = document.getElementById('color-value');
+
+  // This variable will hold the QRCode.js object once one has been
+  // created, so future generations can clear out the old one first.
+  let qrInstance = null;
+
+  // This remembers the last URL that was successfully turned into a
+  // QR code, so that changing the color afterward can redraw the
+  // same code in the new color without requiring the user to press
+  // "Generate" again.
+  let lastGeneratedUrl = null;
+
+  // The QR code's background stays fixed at near-white. This keeps
+  // the contrast between the two colors high enough for scanners to
+  // read reliably, no matter what foreground color is chosen.
+  const QR_BACKGROUND_COLOR = '#FFFEFB';
+
+  // --- STEP 2: Helper function — clean up whatever the user typed ---
+  // If someone types "example.com" without "https://", we add it
+  // automatically rather than making them retype it. Browsers need
+  // the "https://" prefix to treat it as a real, valid URL.
+  function normalizeUrl(rawValue) {
+    const trimmed = rawValue.trim();
+
+    // An empty field isn't a URL to normalize — return nothing so
+    // the caller can show a "please enter something" message.
+    if (!trimmed) {
+      return null;
+    }
+
+    // Only add a prefix if one isn't already there (covers both
+    // http:// and https://, in case someone deliberately wants http).
+    const hasProtocol = /^https?:\/\//i.test(trimmed);
+    return hasProtocol ? trimmed : 'https://' + trimmed;
+  }
+
+  // --- STEP 3: Helper function — check if a string is a real URL ---
+  // The built-in URL() constructor throws an error if given text
+  // that isn't a structurally valid URL, so we use that as our test.
+  function isValidUrl(value) {
+    try {
+      new URL(value);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // --- STEP 4: Helper function — show an error message accessibly ---
+  // Updates both the visible text and the ARIA attribute that tells
+  // screen readers "this field currently has an invalid value."
+  function showError(message) {
+    errorText.textContent = message;
+    input.setAttribute('aria-invalid', 'true');
+    result.classList.remove('visible');
+  }
+
+  // --- STEP 5: Helper function — clear any previous error state ---
+  function clearError() {
+    errorText.textContent = '';
+    input.setAttribute('aria-invalid', 'false');
+  }
+
+  // The initials shown in a small white box over the center of the
+  // QR code. Highest error correction (see correctLevel below) means
+  // up to ~30% of the code can be obscured and it will still scan.
+  const CENTER_INITIALS = 'JAN';
+
+  // --- STEP 6: Helper function — actually draw the QR code ---
+  function generateQrCode(url) {
+    // Remember this URL so the color picker's "change" handler can
+    // redraw the same code later without needing the form resubmitted.
+    lastGeneratedUrl = url;
+
+    // Empty out the container in case a QR code was already drawn
+    // there from a previous submission.
+    qrContainer.innerHTML = '';
+
+    // QRCode.js does the actual drawing. It renders either a
+    // <canvas> or an <img> into the container we give it, depending
+    // on what the browser supports. colorDark comes from the color
+    // picker; colorLight is locked to near-white so the code always
+    // keeps enough contrast to stay scannable.
+    // correctLevel is set to H (High) — the strongest of QRCode.js's
+    // four levels — so the code can still be scanned correctly even
+    // with the center initials box drawn on top of it below.
+    qrInstance = new QRCode(qrContainer, {
+      text: url,
+      width: 200,
+      height: 200,
+      colorDark: colorInput.value,
+      colorLight: QR_BACKGROUND_COLOR,
+      correctLevel: QRCode.CorrectLevel.H
+    });
+
+    // Show the plain-text URL underneath the code, so sighted users
+    // can double check what was encoded, and so it's readable by
+    // anyone who can't scan the code themselves.
+    resultUrl.textContent = url;
+
+    // Reveal the result section (it starts hidden via CSS).
+    result.classList.add('visible');
+
+    // QRCode.js draws asynchronously, so the canvas/img element
+    // doesn't exist in the container the instant new QRCode() runs.
+    // A short delay ensures it's ready before we read it.
+    //
+    // IMPORTANT: this library sometimes keeps a hidden <canvas> AND
+    // a visible <img> copy of it side by side (a workaround it uses
+    // for some browsers). If we draw the initials box only onto the
+    // <canvas>, that edit can end up invisible, because the <img>
+    // the browser actually displays was captured before our edit.
+    // To avoid that entirely, we copy whatever the library produced
+    // onto a fresh canvas that only we control, draw the initials
+    // box on that copy, and display the copy — so what's shown is
+    // always guaranteed to include the box.
+    setTimeout(function () {
+      const sourceCanvas = qrContainer.querySelector('canvas');
+      const sourceImage = qrContainer.querySelector('img');
+
+      if (sourceCanvas) {
+        finalizeQrDisplay(sourceCanvas);
+      } else if (sourceImage) {
+        // If the library gave us an <img> instead of a <canvas>,
+        // make sure its pixel data has actually finished loading
+        // before we try to copy it — otherwise we'd copy a blank
+        // image. decode() resolves once the image is ready to draw.
+        if (sourceImage.complete) {
+          finalizeQrDisplay(sourceImage);
+        } else {
+          sourceImage.decode()
+            .then(function () { finalizeQrDisplay(sourceImage); })
+            .catch(function () { finalizeQrDisplay(sourceImage); });
+        }
+      }
+    }, 50);
+  }
+
+  // --- STEP 6b: Helper function — composite the final image and show it ---
+  // Takes whatever QRCode.js produced (a <canvas> or an <img>), copies
+  // its pixels onto a new canvas we fully control, draws the white
+  // initials box on top of that copy, then replaces the container's
+  // contents with a single <img> built from the result. Because we
+  // build this final <img> ourselves, there's no risk of the library
+  // swapping in an un-edited copy afterward.
+  function finalizeQrDisplay(source) {
+    const size = 200; // matches the width/height passed to QRCode above
+
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = size;
+    finalCanvas.height = size;
+    const ctx = finalCanvas.getContext('2d');
+
+    // Copy the QR code itself onto our canvas.
+    ctx.drawImage(source, 0, 0, size, size);
+
+    // Draw the white initials box on top of the copy.
+    drawInitialsBox(finalCanvas);
+
+    // Convert the finished composite to a data URL once, and reuse
+    // it both for on-screen display and for the download link, so
+    // the two are always guaranteed to match exactly.
+    const finalDataUrl = finalCanvas.toDataURL('image/png');
+
+    qrContainer.innerHTML = '';
+    const finalImage = document.createElement('img');
+    finalImage.src = finalDataUrl;
+    finalImage.width = size;
+    finalImage.height = size;
+    // Decorative here: the container it sits in already carries the
+    // accessible label (role="img" + aria-label set in the HTML).
+    finalImage.alt = '';
+    qrContainer.appendChild(finalImage);
+
+    downloadLink.href = finalDataUrl;
+  }
+
+  // --- STEP 6c: Helper function — draw the initials box on the canvas ---
+  // Paints a small white square in the exact center of the QR code
+  // canvas, then writes the initials on top of it in the QR code's
+  // current color. High error correction (set above) means the code
+  // can absorb this much obstruction and still scan correctly.
+  function drawInitialsBox(canvas) {
+    const ctx = canvas.getContext('2d');
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    // The box is sized as a modest fraction of the whole code —
+    // roughly a fifth of the width — which comfortably fits within
+    // what High correction can tolerate while leaving room to spare.
+    const boxSize = canvas.width * 0.22;
+
+    // White box, centered.
+    ctx.fillStyle = QR_BACKGROUND_COLOR;
+    ctx.fillRect(centerX - boxSize / 2, centerY - boxSize / 2, boxSize, boxSize);
+
+    // Initials, drawn in the same color as the QR code's dark
+    // modules so the whole design reads as one cohesive color.
+    ctx.fillStyle = colorInput.value;
+    ctx.font = 'bold ' + Math.round(boxSize * 0.4) + 'px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(CENTER_INITIALS, centerX, centerY + 1);
+  }
+
+  // --- STEP 7: Wire everything together — what happens on submit ---
+  form.addEventListener('submit', function (event) {
+    // Stop the browser's default form submission, which would
+    // normally reload the page — everything here happens in place.
+    event.preventDefault();
+
+    clearError();
+
+    const normalized = normalizeUrl(input.value);
+
+    // Case 1: the field was empty (or just whitespace).
+    if (!normalized) {
+      showError('Enter a URL first.');
+      return;
+    }
+
+    // Case 2: something was typed, but it isn't a structurally
+    // valid URL even after adding "https://".
+    if (!isValidUrl(normalized)) {
+      showError("That doesn't look like a valid URL.");
+      return;
+    }
+
+    // Case 3: success — draw the QR code.
+    generateQrCode(normalized);
+  });
+
+  // --- STEP 8: Keep the visible hex readout in sync with the picker ---
+  // The native color input's value is always a hex string like
+  // "#1e3a8a", so we just uppercase it to match the rest of the UI.
+  colorInput.addEventListener('input', function () {
+    colorValueLabel.textContent = colorInput.value.toUpperCase();
+
+    // If a QR code has already been generated, redraw it immediately
+    // in the newly chosen color, so the swatch and the code always
+    // match without the user needing to press "Generate" again.
+    if (lastGeneratedUrl) {
+      generateQrCode(lastGeneratedUrl);
+    }
+  });
+</script>
+
+</body>
+</html>

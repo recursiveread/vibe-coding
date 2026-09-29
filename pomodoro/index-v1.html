@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Julia's Pomodoro Timer</title>
+
+<!--
+  ============================================================
+  POMODORO TIMER
+  ============================================================
+  v1.0 - initial build
+
+  WHAT THIS FILE IS:
+  A single, self-contained HTML file. Open it in any browser
+  and it works — no server, no build step, no installation,
+  and no external libraries.
+
+  HOW IT WORKS:
+  1. A 25-minute countdown is held in memory as a number of
+     seconds remaining.
+  2. Start begins ticking that number down once per second.
+  3. Pause stops the ticking without losing the remaining time.
+  4. Reset stops the ticking and sets the time back to 25:00.
+
+  PRIVACY NOTE:
+  Nothing on this page makes any network request at all. The
+  countdown runs entirely in the browser's own memory and is
+  lost when the page is closed or reloaded — nothing is saved,
+  sent, or tracked anywhere.
+  ============================================================
+-->
+
+<style>
+  /* ============================================================
+     v1.0 - DESIGN TOKENS
+     Centralized color values so the whole page's look can be
+     adjusted from one place.
+     ============================================================ */
+  :root {
+    --bg: #1B1F23;          /* page background */
+    --surface: #23282D;      /* button background */
+    --text: #EDEAE3;         /* primary text/timer color */
+    --line: #343B42;         /* button borders */
+    --accent: #E8734A;       /* Start button + focus/hover color */
+    --accent-dim: #B85A38;   /* Start button hover shade */
+  }
+
+  /* Reset box sizing globally so padding/border never break layout math. */
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Respect users who have asked their OS/browser to reduce motion. */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    /* Flexbox centers everything both horizontally and vertically,
+       and re-centers automatically as the viewport size changes. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* clamp() scales the gap between the timer and buttons smoothly
+       between a minimum and maximum as the screen gets wider. */
+    gap: clamp(32px, 6vw, 56px);
+    max-width: 100%;
+  }
+
+  /* The page's true heading, for screen readers and browser tabs.
+     It's visually hidden because the brief asked for "just the
+     timer" on screen, but a heading is still needed so screen
+     reader users know what page they've landed on. */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ============================================================
+     TIMER DISPLAY
+     Sized with clamp() and a vw unit so it stays "large and
+     readable across a room" on any screen: it grows on big
+     displays but never overflows a small phone screen.
+     ============================================================ */
+  .display {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(4.5rem, 22vw, 16rem);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    /* Keeps each digit the same width, so the display doesn't
+       visibly jitter side to side as numbers change every second. */
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+
+  /* ============================================================
+     CONTROLS
+     ============================================================ */
+  .controls {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    font-weight: 600;
+    /* Minimum 44px touch target height (48px here) so buttons are
+       comfortably tappable on phones, per standard accessibility
+       touch-target guidance. */
+    min-height: 48px;
+    padding: 12px 32px;
+    border-radius: 8px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  button:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  /* Visible focus outline for anyone navigating by keyboard (Tab
+     key). This is the only focus indicator on the page — nothing
+     removes the browser's default without replacing it. */
+  button:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  #start-btn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1B1F23;
+  }
+
+  #start-btn:hover:not(:disabled) {
+    background: var(--accent-dim);
+    border-color: var(--accent-dim);
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ============================================================
+     RESPONSIVE BREAKPOINTS
+     Phone: the default styles above (flex layout + clamp() sizing)
+     already adapt continuously, so no phone-specific override is
+     needed here — this is intentional, not an oversight.
+     ============================================================ */
+  @media (max-width: 360px) {
+    .controls {
+      gap: 10px;
+    }
+
+    button {
+      padding: 12px 20px;
+    }
+  }
+
+  /* Tablet and up: give the buttons a little more breathing room. */
+  @media (min-width: 768px) {
+    .controls {
+      gap: 20px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <!-- A real, present heading for screen reader users and browser
+       tooling, hidden visually since the brief calls for a screen
+       that shows only the timer and its three buttons. -->
+  <h1 class="visually-hidden">Pomodoro Timer</h1>
+
+  <!--
+    role="timer" identifies this as a live countdown to assistive
+    technology. aria-live="off" is deliberate: announcing a change
+    every single second would talk over the user constantly, so the
+    running countdown is silent to screen readers by design. Screen
+    reader users instead get the important moments (started, paused,
+    reset, finished) from the separate status region below.
+  -->
+  <div class="display" id="display" role="timer" aria-live="off" aria-label="Time remaining">25:00</div>
+
+  <div class="controls" role="group" aria-label="Timer controls">
+    <button id="start-btn" type="button">Start</button>
+    <button id="pause-btn" type="button" disabled>Pause</button>
+    <button id="reset-btn" type="button">Reset</button>
+  </div>
+
+  <!--
+    A visually hidden live region. This is where screen readers get
+    their announcements from — "polite" means it waits for the user
+    to pause before speaking, rather than interrupting them. It's
+    kept separate from the timer display above so it can announce
+    occasional events (start/pause/reset/finish) without repeating
+    the time itself every second.
+  -->
+  <p class="visually-hidden" id="status-message" role="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ============================================================
+  // v1.0 - initial build
+  // POMODORO TIMER — APPLICATION LOGIC
+  // ============================================================
+  // This script:
+  //   1. Grabs references to the HTML elements we need to read
+  //      from or write to.
+  //   2. Keeps track of how many seconds are left as a single
+  //      number, which is the one source of truth for the display.
+  //   3. Wires up Start, Pause, and Reset to change that number
+  //      and redraw the screen.
+  //   4. Announces key moments (started, paused, reset, finished)
+  //      to screen reader users through a hidden status region.
+  // ============================================================
+
+  // --- STEP 1: Constants and state ---
+
+  // How long the countdown runs, in whole seconds (25 minutes).
+  const START_SECONDS = 25 * 60;
+
+  // How many seconds remain right now. This is the single source of
+  // truth for what's shown on screen — every redraw reads from here.
+  let secondsLeft = START_SECONDS;
+
+  // Holds the ID returned by setInterval so the countdown can be
+  // stopped later with clearInterval. Null means nothing is running.
+  let intervalId = null;
+
+  // --- STEP 2: Get references to the HTML elements we'll interact with ---
+  const display = document.getElementById('display');
+  const startBtn = document.getElementById('start-btn');
+  const pauseBtn = document.getElementById('pause-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const statusMessage = document.getElementById('status-message');
+
+  // --- STEP 3: Helper function — format seconds as "MM:SS" ---
+  // Turns a raw number of seconds into a five-character string like
+  // "25:00" or "04:07", padding single digits with a leading zero
+  // so the display width never shifts as the numbers change.
+  function formatTime(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+  }
+
+  // --- STEP 4: Helper function — redraw the on-screen time ---
+  // Reads the current secondsLeft value and writes it into the
+  // display element. Called once up front, and again every second
+  // while the countdown is running.
+  function updateDisplay() {
+    display.textContent = formatTime(secondsLeft);
+  }
+
+  // --- STEP 5: Helper function — announce a message to screen readers ---
+  // Writes text into the hidden status region. Because that region
+  // has aria-live="polite", assistive technology speaks this text
+  // automatically, without the user needing to navigate to it.
+  function announce(message) {
+    statusMessage.textContent = message;
+  }
+
+  // --- STEP 6: Start button behavior ---
+  // Begins (or resumes) counting down once per second. If the timer
+  // is already running, or has already reached zero, this does
+  // nothing — Start is also disabled in the UI in both of those
+  // cases, but the check here guards against any other trigger too.
+  function startTimer() {
+    if (intervalId !== null || secondsLeft <= 0) {
+      return;
+    }
+
+    intervalId = setInterval(function () {
+      secondsLeft--;
+      updateDisplay();
+
+      // When the countdown reaches zero, stop it automatically and
+      // let the user know, rather than counting into negative numbers.
+      if (secondsLeft <= 0) {
+        pauseTimer();
+        announce('Time is up.');
+      }
+    }, 1000);
+
+    // Swap which buttons are usable: once running, Start is disabled
+    // (there's nothing more "starting" to do) and Pause becomes
+    // available (there's now something to pause).
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+
+    announce('Timer started.');
+  }
+
+  // --- STEP 7: Pause button behavior ---
+  // Stops the countdown without resetting the remaining time, so
+  // pressing Start again continues from exactly where it left off.
+  function pauseTimer() {
+    clearInterval(intervalId);
+    intervalId = null;
+
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+  }
+
+  // Wraps pauseTimer() with an announcement, but only for an actual
+  // user click — the automatic stop at zero (above) announces its
+  // own "Time is up" message instead, so it calls pauseTimer()
+  // directly without this wrapper.
+  function pauseTimerFromUserClick() {
+    pauseTimer();
+    announce('Timer paused.');
+  }
+
+  // --- STEP 8: Reset button behavior ---
+  // Stops the countdown (if running) and sets the time back to the
+  // full 25 minutes, ready to start again from scratch.
+  function resetTimer() {
+    pauseTimer();
+    secondsLeft = START_SECONDS;
+    updateDisplay();
+    announce('Timer reset to 25 minutes.');
+  }
+
+  // --- STEP 9: Wire the buttons up to their behavior ---
+  startBtn.addEventListener('click', startTimer);
+  pauseBtn.addEventListener('click', pauseTimerFromUserClick);
+  resetBtn.addEventListener('click', resetTimer);
+
+  // --- STEP 10: Draw the initial 25:00 as soon as the page loads ---
+  updateDisplay();
+</script>
+
+</body>
+</html>

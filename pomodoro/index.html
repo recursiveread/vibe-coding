@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Julia's Pomodoro Timer</title>
+
+<!--
+  ============================================================
+  POMODORO TIMER
+  ============================================================
+  v3.0 - added a generated beep sound on phase change, plus mute
+
+  WHAT THIS FILE IS:
+  A single, self-contained HTML file. Open it in any browser
+  and it works — no server, no build step, no installation,
+  and no external libraries.
+
+  HOW IT WORKS:
+  1. A work countdown (default 25 minutes, editable on the page)
+     is held in memory as a number of seconds remaining.
+  2. Start begins ticking that number down once per second.
+  3. Pause stops the ticking without losing the remaining time.
+  4. Reset stops the ticking and sets the time back to a fresh
+     work session at the currently set length.
+  5. When the work countdown reaches zero, a break countdown
+     (default 5 minutes, also editable) starts automatically.
+     When the break reaches zero, a fresh work countdown starts
+     automatically, and the cycle repeats for as long as the
+     timer keeps running.
+  6. Which phase is active (Work or Break) is shown as a visible
+     label and as a page background color, so it's readable at a
+     glance from across a room, not just in the numbers.
+  7. A short beep — synthesized in code with the Web Audio API,
+     not an audio file — plays at each phase change, unless the
+     Mute button has been toggled on.
+
+  PRIVACY NOTE:
+  Nothing on this page makes any network request at all. The
+  countdown runs entirely in the browser's own memory and is
+  lost when the page is closed or reloaded — nothing is saved,
+  sent, or tracked anywhere. The beep is generated live by the
+  browser's built-in Web Audio API; no sound file is loaded.
+  ============================================================
+-->
+
+<style>
+  /* ============================================================
+     v1.0 - DESIGN TOKENS
+     v2.0 - added a separate color set for Work vs. Break, applied
+     via a class on <body> (see ".mode-work" / ".mode-break" below)
+     so the whole page's palette swaps together in one place.
+     ============================================================ */
+  :root {
+    --line: #343B42;         /* button borders (shared across modes) */
+  }
+
+  /* Work mode: the original warm/neutral palette. */
+  body.mode-work {
+    --bg: #1B1F23;
+    --surface: #23282D;
+    --text: #EDEAE3;
+    --accent: #E8734A;
+    --accent-dim: #B85A38;
+  }
+
+  /* Break mode: a cooler, calmer palette — distinct enough from
+     Work mode to tell them apart at a glance, without either one
+     being hard to read. */
+  body.mode-break {
+    --bg: #142623;
+    --surface: #1C332F;
+    --text: #E6F2EF;
+    --accent: #4FB3A0;
+    --accent-dim: #3A8B7B;
+  }
+
+  /* Reset box sizing globally so padding/border never break layout math. */
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Respect users who have asked their OS/browser to reduce motion. */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    /* Flexbox centers everything both horizontally and vertically,
+       and re-centers automatically as the viewport size changes. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    /* Smoothly fades the background/text color when switching
+       between Work and Break, instead of an abrupt jump. Disabled
+       automatically for reduced-motion users by the rule above. */
+    transition: background-color 0.6s ease, color 0.6s ease;
+  }
+
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* clamp() scales the gap between the timer and buttons smoothly
+       between a minimum and maximum as the screen gets wider. */
+    gap: clamp(32px, 6vw, 56px);
+    max-width: 100%;
+  }
+
+  /* The page's true heading, for screen readers and browser tabs.
+     It's visually hidden because the brief asked for "just the
+     timer" on screen, but a heading is still needed so screen
+     reader users know what page they've landed on. */
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ============================================================
+     TIMER DISPLAY
+     Sized with clamp() and a vw unit so it stays "large and
+     readable across a room" on any screen: it grows on big
+     displays but never overflows a small phone screen.
+     ============================================================ */
+  .display {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(4.5rem, 22vw, 16rem);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: var(--text);
+    /* Keeps each digit the same width, so the display doesn't
+       visibly jitter side to side as numbers change every second. */
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+
+  /* ============================================================
+     MODE LABEL
+     A visible "WORK" / "BREAK" label, styled to stand out in the
+     current mode's accent color, so which phase is active is
+     readable at a glance — not just inferred from the background.
+     ============================================================ */
+  .mode-label {
+    font-size: clamp(1.1rem, 3vw, 1.75rem);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0;
+    transition: color 0.6s ease;
+  }
+
+  /* ============================================================
+     SETTINGS (work/break duration inputs)
+     ============================================================ */
+  .settings {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .settings-field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .settings-field label {
+    font-size: 0.8rem;
+    color: var(--text);
+    opacity: 0.75;
+  }
+
+  .settings-field .input-with-unit {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 4px 10px;
+  }
+
+  .settings-field input[type="number"] {
+    width: 3.5em;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    text-align: right;
+    /* 16px effective size (via 1rem base) avoids iOS Safari
+       auto-zooming the page when this input gains focus. */
+  }
+
+  .settings-field input[type="number"]:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .settings-field .unit {
+    font-size: 0.85rem;
+    color: var(--text);
+    opacity: 0.6;
+  }
+
+  .settings-field input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ============================================================
+     CONTROLS
+     ============================================================ */
+  .controls {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    font-weight: 600;
+    /* Minimum 44px touch target height (48px here) so buttons are
+       comfortably tappable on phones, per standard accessibility
+       touch-target guidance. */
+    min-height: 48px;
+    padding: 12px 32px;
+    border-radius: 8px;
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  button:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+
+  button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  /* Visible focus outline for anyone navigating by keyboard (Tab
+     key). This is the only focus indicator on the page — nothing
+     removes the browser's default without replacing it. */
+  button:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  #start-btn {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1B1F23;
+  }
+
+  #start-btn:hover:not(:disabled) {
+    background: var(--accent-dim);
+    border-color: var(--accent-dim);
+  }
+
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* The mute button is a toggle, not a primary action, so it gets a
+     quieter visual treatment than Start/Pause/Reset: smaller, no
+     fill, just an outline that fills in with the accent color once
+     muted is active (see the [aria-pressed="true"] rule below). */
+  #mute-btn {
+    background: transparent;
+    font-size: clamp(0.85rem, 1.6vw, 1rem);
+    padding: 10px 20px;
+  }
+
+  #mute-btn[aria-pressed="true"] {
+    background: var(--surface);
+    border-color: var(--text);
+  }
+
+  /* ============================================================
+     RESPONSIVE BREAKPOINTS
+     Phone: the default styles above (flex layout + clamp() sizing)
+     already adapt continuously, so no phone-specific override is
+     needed here — this is intentional, not an oversight.
+     ============================================================ */
+  @media (max-width: 360px) {
+    .controls {
+      gap: 10px;
+    }
+
+    button {
+      padding: 12px 20px;
+    }
+  }
+
+  /* Tablet and up: give the buttons a little more breathing room. */
+  @media (min-width: 768px) {
+    .controls {
+      gap: 20px;
+    }
+  }
+</style>
+</head>
+<body class="mode-work">
+
+<main>
+  <!-- A real, present heading for screen reader users and browser
+       tooling, hidden visually since the brief calls for a screen
+       that shows only the timer and its three buttons. -->
+  <h1 class="visually-hidden">Pomodoro Timer</h1>
+
+  <!--
+    Visible label for which phase is currently active. It's a real,
+    on-screen element (not hidden) so it's readable at a glance, and
+    it also carries its own gentle aria-live announcement for screen
+    reader users when the phase changes.
+  -->
+  <p class="mode-label" id="mode-label" aria-live="polite">Work</p>
+
+  <!--
+    role="timer" identifies this as a live countdown to assistive
+    technology. aria-live="off" is deliberate: announcing a change
+    every single second would talk over the user constantly, so the
+    running countdown is silent to screen readers by design. Screen
+    reader users instead get the important moments (started, paused,
+    reset, phase changes) from the separate status region below.
+  -->
+  <div class="display" id="display" role="timer" aria-live="off" aria-label="Time remaining">25:00</div>
+
+  <!--
+    Duration settings. Real <label>s and type="number" give this
+    proper semantics and a numeric keyboard on mobile. The inputs
+    are disabled while the countdown is running (see the JavaScript
+    below) so a length can't be changed out from under an active
+    countdown in a confusing way.
+  -->
+  <div class="settings">
+    <div class="settings-field">
+      <label for="work-minutes-input">Work length</label>
+      <div class="input-with-unit">
+        <input
+          type="number"
+          id="work-minutes-input"
+          name="work-minutes-input"
+          min="1"
+          max="180"
+          step="1"
+          value="25"
+          inputmode="numeric"
+        >
+        <span class="unit">min</span>
+      </div>
+    </div>
+
+    <div class="settings-field">
+      <label for="break-minutes-input">Break length</label>
+      <div class="input-with-unit">
+        <input
+          type="number"
+          id="break-minutes-input"
+          name="break-minutes-input"
+          min="1"
+          max="180"
+          step="1"
+          value="5"
+          inputmode="numeric"
+        >
+        <span class="unit">min</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" role="group" aria-label="Timer controls">
+    <button id="start-btn" type="button">Start</button>
+    <button id="pause-btn" type="button" disabled>Pause</button>
+    <button id="reset-btn" type="button">Reset</button>
+    <!--
+      aria-pressed marks this as a toggle button (as opposed to a
+      one-shot action like the three above), so screen readers
+      announce its current on/off state, not just its label text.
+    -->
+    <button id="mute-btn" type="button" aria-pressed="false">Mute</button>
+  </div>
+
+  <!--
+    A visually hidden live region. This is where screen readers get
+    their announcements from — "polite" means it waits for the user
+    to pause before speaking, rather than interrupting them. It's
+    kept separate from the timer display above so it can announce
+    occasional events (start/pause/reset/finish) without repeating
+    the time itself every second.
+  -->
+  <p class="visually-hidden" id="status-message" role="status" aria-live="polite"></p>
+</main>
+
+<script>
+  // ============================================================
+  // v1.0 - initial build
+  // v2.0 - added automatic work/break cycle
+  // v3.0 - added editable work/break lengths (in minutes)
+  // POMODORO TIMER — APPLICATION LOGIC
+  // ============================================================
+  // This script:
+  //   1. Grabs references to the HTML elements we need to read
+  //      from or write to.
+  //   2. Reads the work/break lengths from two number inputs on
+  //      the page (defaulting to 25 and 5 minutes), instead of
+  //      using fixed, hardcoded durations.
+  //   3. Keeps track of which phase is active (work or break) and
+  //      how many seconds are left in that phase — together these
+  //      two values are the single source of truth for the screen.
+  //   4. Wires up Start, Pause, and Reset to change that state and
+  //      redraw the screen.
+  //   5. When a phase's countdown reaches zero, automatically
+  //      switches to the other phase and keeps running.
+  //   6. Announces key moments (started, paused, reset, phase
+  //      changes) to screen reader users through a hidden status
+  //      region, and shows the active phase visibly at all times.
+  // ============================================================
+
+  // --- STEP 1: Constants and state ---
+
+  // Fallback lengths used only if a settings input is ever left
+  // empty or otherwise invalid — the visible inputs already default
+  // to these same numbers, so this is a safety net, not the normal path.
+  const DEFAULT_WORK_MINUTES = 25;
+  const DEFAULT_BREAK_MINUTES = 5;
+
+  // Which phase is currently active: the string 'work' or 'break'.
+  // This drives the visible label, the page's color scheme, and
+  // which duration a phase change resets the countdown to.
+  let mode = 'work';
+
+  // How many seconds remain right now. This is the single source of
+  // truth for what's shown on screen — every redraw reads from here.
+  let secondsLeft = DEFAULT_WORK_MINUTES * 60;
+
+  // Holds the ID returned by setInterval so the countdown can be
+  // stopped later with clearInterval. Null means nothing is running.
+  let intervalId = null;
+
+  // Whether the phase-change beep is silenced. Starts off (false)
+  // so the sound plays by default; the Mute button flips this.
+  let isMuted = false;
+
+  // The Web Audio API context used to generate the beep. It's only
+  // created the first time a beep is actually needed (see
+  // getAudioContext() below), since browsers restrict creating one
+  // before the user has interacted with the page at all.
+  let audioContext = null;
+
+  // --- STEP 2: Get references to the HTML elements we'll interact with ---
+  const bodyEl = document.body;
+  const modeLabel = document.getElementById('mode-label');
+  const display = document.getElementById('display');
+  const workMinutesInput = document.getElementById('work-minutes-input');
+  const breakMinutesInput = document.getElementById('break-minutes-input');
+  const startBtn = document.getElementById('start-btn');
+  const pauseBtn = document.getElementById('pause-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const muteBtn = document.getElementById('mute-btn');
+  const statusMessage = document.getElementById('status-message');
+
+  // --- STEP 3: Helper function — format seconds as "MM:SS" ---
+  // Turns a raw number of seconds into a five-character string like
+  // "25:00" or "04:07", padding single digits with a leading zero
+  // so the display width never shifts as the numbers change.
+  function formatTime(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+  }
+
+  // --- STEP 4: Helper function — redraw the on-screen time ---
+  // Reads the current secondsLeft value and writes it into the
+  // display element. Called once up front, and again every second
+  // while the countdown is running.
+  function updateDisplay() {
+    display.textContent = formatTime(secondsLeft);
+  }
+
+  // --- STEP 5: Helper function — announce a message to screen readers ---
+  // Writes text into the hidden status region. Because that region
+  // has aria-live="polite", assistive technology speaks this text
+  // automatically, without the user needing to navigate to it.
+  function announce(message) {
+    statusMessage.textContent = message;
+  }
+
+  // --- STEP 5a: Helper function — get (or lazily create) the audio context ---
+  // AudioContext is the Web Audio API's entry point for generating
+  // sound in code. It's created only once, the first time a beep is
+  // actually needed, rather than immediately on page load — some
+  // browsers ignore or restrict audio contexts created before the
+  // user has interacted with the page at all.
+  function getAudioContext() {
+    if (!audioContext) {
+      // Safari historically only exposed this under a webkit-prefixed
+      // name, so both are checked for broad browser compatibility.
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioContext = new AudioContextClass();
+    }
+    return audioContext;
+  }
+
+  // --- STEP 5b: Helper function — synthesize and play a short beep ---
+  // Builds the beep entirely out of numbers, in code, using the Web
+  // Audio API — no audio file is loaded or referenced anywhere. An
+  // oscillator generates a plain tone, and a gain (volume) node
+  // fades that tone out quickly so it reads as a short "beep" rather
+  // than an abrupt on/off click or a sustained note.
+  function playBeep() {
+    // Respect the Mute button — do nothing at all if muted.
+    if (isMuted) {
+      return;
+    }
+
+    try {
+      const ctx = getAudioContext();
+
+      // The oscillator is the actual sound source: a simple sine
+      // wave at 880 Hz (the musical note A5), a clear, short "ping"
+      // pitch commonly used for notification-style sounds.
+      const oscillator = ctx.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+
+      // The gain node controls volume over time. Starting at a
+      // moderate volume and ramping down to (near) silent over 0.3
+      // seconds gives the tone a natural fade-out instead of an
+      // abrupt stop.
+      const gainNode = ctx.createGain();
+      gainNode.gain.setValueAtTime(0.25, ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+
+      // Wire the pieces together: oscillator -> gain -> speakers,
+      // then play the tone for 0.3 seconds and stop automatically.
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.3);
+    } catch (error) {
+      // If the browser blocks audio for some reason (e.g. autoplay
+      // restrictions), fail silently rather than breaking the timer
+      // — the countdown itself matters far more than the beep.
+    }
+  }
+
+  // --- STEP 5b: Helper function — safely read a minutes input ---
+  // Number inputs can still hold invalid content (empty, negative,
+  // decimals, non-numbers pasted in), so this reads the raw value,
+  // falls back to a sensible default if it's not a usable whole
+  // number, and writes the cleaned-up value back into the field so
+  // what's displayed always matches what the timer will actually use.
+  function readMinutesInput(inputEl, fallbackMinutes) {
+    const parsed = Math.floor(Number(inputEl.value));
+    const isValidWholeNumber = Number.isFinite(parsed) && parsed >= 1;
+    const minutes = isValidWholeNumber ? parsed : fallbackMinutes;
+
+    inputEl.value = minutes;
+    return minutes;
+  }
+
+  // --- STEP 6: Helper function — switch between Work and Break ---
+  // Updates every part of the page that depends on which phase is
+  // active: the body's CSS class (which swaps the color palette via
+  // the .mode-work / .mode-break rules in the stylesheet), the
+  // visible text label, the timer's accessible name, and how many
+  // seconds the countdown resets to — read fresh from the settings
+  // inputs each time, so the latest values on the page are always used.
+  function setMode(newMode) {
+    mode = newMode;
+
+    if (mode === 'work') {
+      const workMinutes = readMinutesInput(workMinutesInput, DEFAULT_WORK_MINUTES);
+      secondsLeft = workMinutes * 60;
+      bodyEl.classList.remove('mode-break');
+      bodyEl.classList.add('mode-work');
+      modeLabel.textContent = 'Work';
+      display.setAttribute('aria-label', 'Work time remaining');
+    } else {
+      const breakMinutes = readMinutesInput(breakMinutesInput, DEFAULT_BREAK_MINUTES);
+      secondsLeft = breakMinutes * 60;
+      bodyEl.classList.remove('mode-work');
+      bodyEl.classList.add('mode-break');
+      modeLabel.textContent = 'Break';
+      display.setAttribute('aria-label', 'Break time remaining');
+    }
+
+    updateDisplay();
+  }
+
+  // --- STEP 7: Start button behavior ---
+  // Begins (or resumes) counting down once per second. If the timer
+  // is already running, this does nothing — Start is also disabled
+  // in the UI while running, but the check here guards against any
+  // other trigger too.
+  function startTimer() {
+    if (intervalId !== null) {
+      return;
+    }
+
+    intervalId = setInterval(function () {
+      secondsLeft--;
+      updateDisplay();
+
+      // When the current phase's countdown reaches zero, switch to
+      // the other phase and keep the countdown running automatically
+      // — the user doesn't need to press Start again between phases.
+      if (secondsLeft <= 0) {
+        playBeep();
+
+        if (mode === 'work') {
+          setMode('break');
+          announce('Work session complete. Break started.');
+        } else {
+          setMode('work');
+          announce('Break complete. Work session started.');
+        }
+      }
+    }, 1000);
+
+    // Swap which buttons are usable: once running, Start is disabled
+    // (there's nothing more "starting" to do) and Pause becomes
+    // available (there's now something to pause).
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+
+    // Lock the length inputs while a countdown is actively running,
+    // so a phase's duration can't be changed out from under it mid-
+    // count in a confusing way. They're re-enabled by pauseTimer().
+    workMinutesInput.disabled = true;
+    breakMinutesInput.disabled = true;
+
+    announce(mode === 'work' ? 'Work session started.' : 'Break started.');
+  }
+
+  // --- STEP 8: Pause button behavior ---
+  // Stops the countdown without resetting the remaining time or the
+  // current phase, so pressing Start again continues from exactly
+  // where it left off, in the same phase.
+  function pauseTimer() {
+    clearInterval(intervalId);
+    intervalId = null;
+
+    startBtn.disabled = false;
+    pauseBtn.disabled = true;
+
+    // Unlock the length inputs now that nothing is actively counting.
+    workMinutesInput.disabled = false;
+    breakMinutesInput.disabled = false;
+  }
+
+  // Wraps pauseTimer() with an announcement, for an actual user click.
+  function pauseTimerFromUserClick() {
+    pauseTimer();
+    announce('Timer paused.');
+  }
+
+  // --- STEP 9: Reset button behavior ---
+  // Stops the countdown (if running) and returns to a fresh 25-minute
+  // Work session, regardless of which phase was active beforehand.
+  function resetTimer() {
+    pauseTimer();
+    setMode('work');
+    announce('Timer reset to a 25-minute work session.');
+  }
+
+  // --- STEP 10: Wire the buttons up to their behavior ---
+  startBtn.addEventListener('click', startTimer);
+  pauseBtn.addEventListener('click', pauseTimerFromUserClick);
+  resetBtn.addEventListener('click', resetTimer);
+
+  // --- STEP 10a: Mute button behavior ---
+  // Toggles the isMuted flag that playBeep() checks, and updates the
+  // button's label and aria-pressed state to reflect the new setting.
+  muteBtn.addEventListener('click', function () {
+    isMuted = !isMuted;
+    muteBtn.setAttribute('aria-pressed', String(isMuted));
+    muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+    announce(isMuted ? 'Sound muted.' : 'Sound unmuted.');
+  });
+
+  // --- STEP 11: Keep the countdown in sync while the length inputs change ---
+  // These only run while the timer is idle (the inputs are disabled
+  // whenever it's running — see startTimer/pauseTimer above), so
+  // it's safe to immediately reflect a new length on screen: if the
+  // phase being edited is the one currently shown, re-read it and
+  // redraw the countdown to match, without affecting the other phase.
+  workMinutesInput.addEventListener('change', function () {
+    if (mode === 'work') {
+      setMode('work');
+    } else {
+      // Still validate/clean up the field even if it's not the
+      // active phase right now, so it can't be left in a bad state.
+      readMinutesInput(workMinutesInput, DEFAULT_WORK_MINUTES);
+    }
+  });
+
+  breakMinutesInput.addEventListener('change', function () {
+    if (mode === 'break') {
+      setMode('break');
+    } else {
+      readMinutesInput(breakMinutesInput, DEFAULT_BREAK_MINUTES);
+    }
+  });
+
+  // --- STEP 12: Draw the initial Work state as soon as the page loads ---
+  setMode('work');
+</script>
+
+</body>
+</html>

@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  COUNTDOWN TIMER APP
+  ============================================================
+  // v1.0 - initial build
+  // v1.1 - when the countdown hits zero, the number cards are now
+  //        hidden and replaced with a large "Happy Birthday!"
+  //        celebration message; added missing plain-language
+  //        comments above a few previously-uncommented code blocks
+  What this file does, in plain language:
+  This is a single, self-contained web page that counts down
+  the time remaining until October 12, 2026 (midnight, Eastern
+  Time). It shows days, hours, minutes, and seconds, updating
+  once every second like a digital clock. Everything (the
+  structure, the styling, and the logic) lives in this one
+  file so it can be opened directly in any browser with no
+  extra setup, no internet connection required after loading,
+  and no data ever leaves the browser.
+  ============================================================
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Makes the page resize correctly on phones and tablets -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Countdown Timer</title>
+
+  <!--
+    We load a Google Font called "Orbitron" from a CDN. It has a
+    blocky, futuristic look reminiscent of digital clocks/LED
+    displays, which fits the "neon green on black" theme.
+    If the CDN is unreachable (e.g., offline use), the CSS below
+    falls back to the browser's built-in monospace font so the
+    page still works.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    /* ============================================================
+       CSS VARIABLES (THEME COLORS)
+       ------------------------------------------------------------
+       Keeping the core colors in variables makes them easy to
+       find and adjust in one place if the look ever needs to
+       change.
+    ============================================================ */
+    :root {
+      --bg-color: #000000;          /* pure black background */
+      --neon-green: #39ff14;        /* bright neon green text */
+      --neon-green-dim: #1f8f0d;    /* a dimmer green for secondary text/labels */
+      --glow: 0 0 8px rgba(57, 255, 20, 0.9), 0 0 20px rgba(57, 255, 20, 0.55), 0 0 40px rgba(57, 255, 20, 0.35);
+    }
+
+    /* Reset default spacing so our layout is predictable across browsers */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Makes sure the page always fills the full height of the browser
+       window, so the centered content below isn't squished at the top */
+    html, body {
+      height: 100%;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--neon-green);
+      font-family: 'Orbitron', 'Courier New', monospace; /* falls back to monospace if the CDN font fails to load */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+      text-align: center;
+      /* Subtle scanline-free flat black keeps focus on the glowing text */
+    }
+
+    /* ============================================================
+       TITLE
+    ============================================================ */
+    h1 {
+      font-size: clamp(1.5rem, 5vw, 3rem); /* scales smoothly between phone and desktop sizes */
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--neon-green);
+      text-shadow: var(--glow);
+      margin-bottom: 0.5rem;
+    }
+
+    /* Small line under the title showing exactly what date we're counting down to */
+    .target-date {
+      font-size: clamp(0.8rem, 2.2vw, 1.1rem);
+      color: var(--neon-green-dim);
+      letter-spacing: 0.08em;
+      margin-bottom: 2.5rem;
+      text-shadow: 0 0 6px rgba(31, 143, 13, 0.6);
+    }
+
+    /* ============================================================
+       COUNTDOWN LAYOUT
+       ------------------------------------------------------------
+       A flexible row of "cards" (one per unit: days, hours,
+       minutes, seconds). On narrow screens they wrap onto two
+       lines automatically because of flex-wrap.
+    ============================================================ */
+    .countdown {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: clamp(0.75rem, 3vw, 2rem);
+      max-width: 1100px;
+      width: 100%;
+    }
+
+    /* Styling for each individual "card" (the box that wraps one number,
+       e.g., the box holding the days count and its "Days" label) */
+    .time-unit {
+      background: #000;
+      border: 2px solid var(--neon-green);
+      border-radius: 1.25rem; /* large rounded corners for a "modern" feel */
+      box-shadow: var(--glow), inset 0 0 15px rgba(57, 255, 20, 0.15);
+      padding: clamp(1rem, 3vw, 2rem) clamp(1rem, 4vw, 2.5rem);
+      min-width: 6.5rem;
+      flex: 1 1 6.5rem;
+      max-width: 11rem;
+    }
+
+    /* The big number itself (e.g., "042") */
+    .time-value {
+      font-size: clamp(2.2rem, 8vw, 5rem);
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums; /* keeps digit widths consistent so numbers don't jitter as they change */
+      text-shadow: var(--glow);
+      display: block;
+    }
+
+    /* The label under each number (e.g., "Days") */
+    .time-label {
+      display: block;
+      margin-top: 0.6rem;
+      font-size: clamp(0.7rem, 2vw, 1rem);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--neon-green-dim);
+    }
+
+    /* ============================================================
+       MESSAGE SHOWN AFTER THE TARGET DATE HAS PASSED
+    ============================================================ */
+    /* The big celebration message that replaces the number cards once the
+       countdown reaches zero. Sized and styled like the numbers above it
+       (large, bold, rounded, glowing neon green) so it reads as the new
+       "main event" on the page rather than a small footnote. */
+    .finished-message {
+      font-size: clamp(2.2rem, 9vw, 5.5rem);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-shadow: var(--glow);
+      margin-top: 1rem;
+      display: none; /* hidden by default; JavaScript reveals it once the countdown reaches zero */
+    }
+
+    /* A gentle pulsing glow animation to make the digits feel "alive" like a real digital display */
+    @keyframes pulseGlow {
+      0%, 100% { text-shadow: 0 0 8px rgba(57, 255, 20, 0.9), 0 0 20px rgba(57, 255, 20, 0.5); }
+      50%      { text-shadow: 0 0 14px rgba(57, 255, 20, 1), 0 0 32px rgba(57, 255, 20, 0.75); }
+    }
+
+    /* Applies the pulsing glow animation defined above to every number in
+       the countdown, and also to the finished-message text once it's shown */
+    .time-value,
+    .finished-message {
+      animation: pulseGlow 2s ease-in-out infinite;
+    }
+
+    /* Respect users who have asked their system to reduce motion */
+    @media (prefers-reduced-motion: reduce) {
+      .time-value {
+        animation: none;
+      }
+    }
+
+    /* Screen-reader-only helper class: visually hides content but keeps
+       it available to assistive technology (used for a live announcement region) */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!--
+    ============================================================
+    PAGE CONTENT
+    ------------------------------------------------------------
+    We use semantic HTML elements (header, main, section) so that
+    screen readers and other assistive technology can understand
+    the structure of the page, not just how it looks.
+    ============================================================
+  -->
+  <!-- The page's heading area: the big title plus a line stating exactly what date we're counting down to -->
+  <header>
+    <h1 id="page-title">Countdown Timer</h1>
+    <p class="target-date" id="target-date-display">
+      Counting down to October 12, 2026 (Eastern Time)
+    </p>
+  </header>
+
+  <!--
+    role="timer" and aria-live="polite" tell screen readers that this
+    region updates on its own and should be read out occasionally
+    without interrupting the user - polite rather than urgent, since
+    a countdown ticking every second would otherwise be read aloud
+    constantly, which would be overwhelming.
+  -->
+  <main
+    class="countdown"
+    id="countdown-display"
+    role="timer"
+    aria-live="polite"
+    aria-labelledby="page-title"
+  >
+    <!-- Card showing the number of full days left -->
+    <section class="time-unit" aria-label="Days remaining">
+      <span class="time-value" id="days">00</span>
+      <span class="time-label">Days</span>
+    </section>
+
+    <!-- Card showing the number of hours left, after whole days are subtracted -->
+    <section class="time-unit" aria-label="Hours remaining">
+      <span class="time-value" id="hours">00</span>
+      <span class="time-label">Hours</span>
+    </section>
+
+    <!-- Card showing the number of minutes left, after whole days and hours are subtracted -->
+    <section class="time-unit" aria-label="Minutes remaining">
+      <span class="time-value" id="minutes">00</span>
+      <span class="time-label">Minutes</span>
+    </section>
+
+    <!-- Card showing the number of seconds left, after whole days, hours, and minutes are subtracted -->
+    <section class="time-unit" aria-label="Seconds remaining">
+      <span class="time-value" id="seconds">00</span>
+      <span class="time-label">Seconds</span>
+    </section>
+  </main>
+
+  <!-- This celebration message stays hidden until the countdown finishes, then JavaScript reveals it in place of the number cards -->
+  <p class="finished-message" id="finished-message" role="alert">
+    🎉 Happy Birthday! 🎉
+  </p>
+
+  <!--
+    A visually-hidden element used to make a single, clean spoken
+    announcement to screen reader users when the countdown ends,
+    separate from the constantly-changing numbers above.
+  -->
+  <p class="sr-only" id="sr-announcement" aria-live="assertive"></p>
+
+  <script>
+    /*
+    ============================================================
+    JAVASCRIPT: COUNTDOWN LOGIC
+    ============================================================
+    // v1.0 - initial build
+    // v1.1 - hides the number cards and shows a "Happy Birthday!"
+    //        message once the countdown reaches zero
+    Plain-language overview of what this script does:
+      1. Defines the exact target moment we're counting down to:
+         midnight at the very start of October 12, 2026, in the
+         US Eastern time zone.
+      2. Every second, it calculates how much time is left between
+         "right now" and that target moment.
+      3. It converts that remaining time into whole days, hours,
+         minutes, and seconds, and writes those numbers onto the
+         page.
+      4. If the target date has already passed, it stops counting
+         and shows a "finished" message instead.
+    All of this happens entirely inside the visitor's own browser -
+    no information is ever sent to a server.
+    ============================================================
+    */
+
+    // ------------------------------------------------------------
+    // STEP 1: Figure out the target date/time in Eastern Time.
+    // ------------------------------------------------------------
+    // Eastern Time can be either EDT (UTC-4, daylight saving) or
+    // EST (UTC-5, standard time), depending on the time of year.
+    // October 12, 2026 falls during Eastern Daylight Time (EDT),
+    // which the U.S. observes until the first Sunday of November.
+    // So "midnight, October 12, 2026, Eastern Time" is written
+    // below with the explicit "-04:00" offset. This guarantees the
+    // countdown targets the correct real-world moment no matter
+    // what time zone the visitor's own device is set to.
+    const TARGET_DATE = new Date("2026-10-12T00:00:00-04:00");
+
+    // ------------------------------------------------------------
+    // STEP 2: Grab references to the page elements we need to
+    // update, so we don't have to look them up again every second.
+    // ------------------------------------------------------------
+    const daysEl = document.getElementById("days");
+    const hoursEl = document.getElementById("hours");
+    const minutesEl = document.getElementById("minutes");
+    const secondsEl = document.getElementById("seconds");
+    const countdownDisplay = document.getElementById("countdown-display");
+    const finishedMessage = document.getElementById("finished-message");
+    const srAnnouncement = document.getElementById("sr-announcement");
+
+    // Keeps track of whether we've already announced "finished",
+    // so we don't repeat the announcement every second once the
+    // countdown reaches zero.
+    let hasAnnouncedFinish = false;
+
+    // Holds the ID of our repeating timer, so we can stop it later
+    // (for example, once the countdown reaches zero).
+    let intervalId = null;
+
+    // ------------------------------------------------------------
+    // STEP 3: Small helper that adds a leading zero to numbers
+    // under 10, so "5" displays as "05" like a real digital clock.
+    // ------------------------------------------------------------
+    function padWithZero(number) {
+      return String(number).padStart(2, "0");
+    }
+
+    // ------------------------------------------------------------
+    // STEP 4: The main function that runs every second.
+    // It compares "now" to the target date, works out the
+    // difference, and updates the numbers on screen.
+    // ------------------------------------------------------------
+    function updateCountdown() {
+      const now = new Date();
+
+      // Milliseconds remaining between now and the target date.
+      const millisecondsRemaining = TARGET_DATE.getTime() - now.getTime();
+
+      // If the countdown has reached (or passed) zero...
+      if (millisecondsRemaining <= 0) {
+        // Hide the four number cards entirely (rather than leaving zeroed-out
+        // numbers on screen) and reveal the "Happy Birthday!" celebration
+        // message in their place, so the message becomes the new focal point.
+        countdownDisplay.style.display = "none";
+        finishedMessage.style.display = "block";
+
+        // Announce this once to screen reader users, so they hear it a
+        // single time rather than on every repeated check of the clock.
+        if (!hasAnnouncedFinish) {
+          srAnnouncement.textContent = "The countdown has ended. Happy Birthday!";
+          hasAnnouncedFinish = true;
+        }
+
+        // Stop the repeating timer since there's nothing left to count down -
+        // this saves battery/CPU by not running calculations forever.
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        return;
+      }
+
+      // Convert the remaining milliseconds into whole days, hours,
+      // minutes, and seconds. Each step below "uses up" the larger
+      // units first, then works out what's left over for the next
+      // smaller unit - similar to making change with coins.
+      const totalSeconds = Math.floor(millisecondsRemaining / 1000);
+
+      const days = Math.floor(totalSeconds / (24 * 60 * 60));
+      const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60));
+      const minutes = Math.floor((totalSeconds % (60 * 60)) / 60);
+      const seconds = totalSeconds % 60;
+
+      // Write the calculated values onto the page.
+      daysEl.textContent = padWithZero(days);
+      hoursEl.textContent = padWithZero(hours);
+      minutesEl.textContent = padWithZero(minutes);
+      secondsEl.textContent = padWithZero(seconds);
+    }
+
+    // ------------------------------------------------------------
+    // STEP 5: Run the update function immediately (so the page
+    // doesn't show blank/zero values for a second while waiting
+    // for the first timer tick), then repeat it every second.
+    // ------------------------------------------------------------
+    updateCountdown();
+    intervalId = setInterval(updateCountdown, 1000);
+
+    // ------------------------------------------------------------
+    // STEP 6: Accessibility/battery consideration - pause the
+    // timer when the browser tab isn't visible, and immediately
+    // refresh the numbers when the user comes back to the tab.
+    // This avoids unnecessary work while saving battery on mobile
+    // devices, without ever showing stale/incorrect numbers.
+    // ------------------------------------------------------------
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) {
+        // Tab is hidden: stop ticking to save resources.
+        if (intervalId !== null) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      } else {
+        // Tab is visible again: refresh immediately, then resume ticking.
+        updateCountdown();
+        if (intervalId === null) {
+          intervalId = setInterval(updateCountdown, 1000);
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<!--
+  Oatmeal Chocolate Chip Cookies — Recipe Card
+  v1.1 — added a shared top navigation row linking to notes.html;
+         file renamed to index.html
+
+  WHAT THIS FILE IS:
+  A single, self-contained web page (HTML + CSS + JS all in this one file)
+  that displays one recipe on a card centered in the middle of the page.
+  It expects an image file named "cookies.png" to sit in the SAME FOLDER
+  as this HTML file — the <img> tag below points to "cookies.png" as a
+  plain relative path, so no upload or server is needed; just keep the
+  two files together. It also links to a second page, "notes.html",
+  which must sit in this same folder for that link to work.
+
+  No build tools, no frameworks, no external JS libraries — plain
+  HTML/CSS/JavaScript that works by simply double-clicking the file
+  open in a browser.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oatmeal Chocolate Chip Cookies — Recipe</title>
+
+<!--
+  Google Fonts (CDN):
+  - "Fraunces" is a warm, slightly rustic serif used for the recipe title
+    and section headings, giving the page a hand-written bakery-card feel.
+  - "Karla" is a clean, rounded sans-serif used for all body text and
+    labels, so long lists of ingredients/steps stay easy to scan.
+  This is the only external resource the page loads; everything else
+  (all CSS and all JavaScript) lives right here in this file.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ==========================================================
+     DESIGN TOKENS
+     A small set of custom properties (CSS variables) that hold
+     every color, font, and spacing value used on the page. Kept
+     in one place at the top so the whole look can be tuned from
+     here without hunting through the rest of the stylesheet.
+     Palette is drawn from the recipe itself: toasted oats, dark
+     brown sugar, melted chocolate, and buttery cream — a warm,
+     kitchen-counter palette rather than a generic tech palette.
+     ========================================================== */
+  :root {
+    --cream:        #FAF3E4;  /* page background: floured countertop */
+    --card:         #FFFDF8;  /* card surface: parchment paper */
+    --oat:          #E7D3AA;  /* soft oat/wheat tone for dividers & tags */
+    --cocoa:        #4A2E1F;  /* deep cocoa brown: headings, primary text */
+    --cocoa-soft:   #7A5A44;  /* lighter cocoa: secondary text */
+    --choc:         #2A1810;  /* near-black chocolate: highest contrast text */
+    --cinnamon:     #B5651D;  /* warm cinnamon accent: the one bold color */
+    --cinnamon-dim: #E8C9A3;  /* pale cinnamon for subtle backgrounds */
+    --line:         rgba(74, 46, 31, 0.16); /* hairline dividers */
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body:    'Karla', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --radius-card: 22px;
+    --radius-sm:   10px;
+
+    --shadow-card: 0 30px 60px -25px rgba(42, 24, 16, 0.35),
+                   0 2px 6px rgba(42, 24, 16, 0.08);
+  }
+
+  /* Respect users who have asked their system to reduce motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* ==========================================================
+     RESET & BASE PAGE LAYOUT
+     Minimal reset, then center the card both vertically and
+     horizontally in the browser viewport with generous padding
+     so it never touches the screen edges on small devices.
+     ========================================================== */
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--cream);
+    /* A very faint dot texture gives the background a subtle
+       "flour dusted counter" feel without distracting from the card. */
+    background-image: radial-gradient(var(--oat) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--choc);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(16px, 4vw, 48px);
+  }
+
+  /* Visually-hidden helper for text that should only be announced
+     by screen readers (used for the "skip" affordance below). */
+  .visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Visible keyboard focus ring on every interactive element,
+     so keyboard users always know where they are on the page. */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  summary:focus-visible {
+    outline: 3px solid var(--cinnamon);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  /* ==========================================================
+     THE RECIPE CARD
+     One centered card that contains the whole recipe. A single
+     gentle "rise in" animation plays once on load — the only
+     non-user-triggered motion on the page.
+     ========================================================== */
+  .recipe-card {
+    width: 100%;
+    max-width: 620px;
+    background: var(--card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    animation: riseIn 0.7s ease-out both;
+  }
+
+  @keyframes riseIn {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card-inner {
+    padding: clamp(22px, 5vw, 44px);
+  }
+
+  /* ---------- Header: title + short tagline ---------- */
+  .recipe-header {
+    text-align: center;
+    padding-bottom: 22px;
+  }
+
+  .recipe-eyebrow {
+    display: block;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    color: var(--cocoa-soft);
+    margin-bottom: 6px;
+    letter-spacing: 0.01em;
+  }
+
+  .recipe-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.8rem, 5vw, 2.5rem);
+    line-height: 1.15;
+    color: var(--cocoa);
+    margin: 0;
+  }
+
+  .recipe-meta {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 0.92rem;
+    color: var(--cocoa-soft);
+  }
+
+  .recipe-meta span {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  .recipe-meta strong {
+    color: var(--cocoa);
+    font-weight: 700;
+  }
+
+  /* ---------- Photo ---------- */
+  .recipe-photo-wrap {
+    margin: 0 clamp(-22px, -5vw, -44px) 26px;
+    /* Pull the photo edge-to-edge within the card padding above,
+       so it reads as a full "photo strip" across the card. */
+  }
+
+  .recipe-photo-wrap img {
+    display: block;
+    width: 100%;
+    height: clamp(200px, 45vw, 320px);
+    object-fit: cover;
+    background: var(--oat); /* shows while loading / if image is missing */
+  }
+
+  /* A friendly fallback message shown only if cookies.png fails to
+     load (e.g. it wasn't placed in the same folder as this file). */
+  .photo-fallback {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: clamp(200px, 45vw, 320px);
+    background: var(--cinnamon-dim);
+    color: var(--cocoa);
+    font-size: 0.95rem;
+    padding: 12px;
+  }
+
+  .recipe-photo-wrap.photo-missing img { display: none; }
+  .recipe-photo-wrap.photo-missing .photo-fallback { display: flex; }
+
+  /* The bottom "finished dish" photo sits inside its own section
+     rather than bleeding edge-to-edge like the top photo, so it
+     gets its own rounded corners instead of inheriting the pulled-
+     out negative margins used above. */
+  .recipe-photo-wrap--bottom {
+    margin: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .recipe-photo-wrap--bottom img,
+  .recipe-photo-wrap--bottom .photo-fallback {
+    height: clamp(180px, 40vw, 280px);
+  }
+
+  /* ---------- Section headings ---------- */
+  .recipe-section {
+    margin-top: 30px;
+  }
+
+  .recipe-section:first-of-type {
+    margin-top: 0;
+  }
+
+  .section-heading {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 1.35rem;
+    color: var(--cocoa);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 10px;
+  }
+
+  .section-progress {
+    font-family: var(--font-body);
+    font-style: normal;
+    font-size: 0.85rem;
+    color: var(--cocoa-soft);
+    white-space: nowrap;
+  }
+
+  /* ---------- Ingredients list ----------
+     Each ingredient is its own checkbox + label pair, so the page
+     works both as something to read and as something to actually
+     cook along with (tap/click an item to check it off while you
+     gather everything from the pantry). */
+  .ingredients-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .ingredients-list li {
+    border-radius: var(--radius-sm);
+  }
+
+  .ingredient-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    line-height: 1.45;
+  }
+
+  .ingredient-label:hover {
+    background: var(--cinnamon-dim);
+  }
+
+  .ingredient-label input[type="checkbox"] {
+    /* Custom-styled checkbox drawn with plain CSS (no icon font
+       or library needed) that still behaves like a real, fully
+       accessible native checkbox. */
+    appearance: none;
+    -webkit-appearance: none;
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    border: 2px solid var(--cocoa-soft);
+    border-radius: 6px;
+    display: grid;
+    place-content: center;
+    cursor: pointer;
+    background: var(--card);
+  }
+
+  .ingredient-label input[type="checkbox"]::before {
+    content: "";
+    width: 11px;
+    height: 11px;
+    transform: scale(0);
+    transition: transform 0.12s ease-in-out;
+    background: var(--cinnamon);
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 45% 62%);
+  }
+
+  .ingredient-label input[type="checkbox"]:checked::before {
+    transform: scale(1);
+  }
+
+  .ingredient-label input[type="checkbox"]:checked ~ .ingredient-text {
+    color: var(--cocoa-soft);
+    text-decoration: line-through;
+    text-decoration-color: var(--cinnamon);
+    text-decoration-thickness: 1.5px;
+  }
+
+  .ingredient-text {
+    font-size: 1rem;
+    color: var(--choc);
+  }
+
+  /* ---------- Steps list ----------
+     An ordered list keeps real step numbers in the markup (good
+     for screen readers and for printing), while a checkbox on
+     each step lets a cook track progress through the method. */
+  .steps-list {
+    list-style: none;
+    counter-reset: step-counter;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .steps-list li {
+    counter-increment: step-counter;
+  }
+
+  .step-label {
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 12px;
+    align-items: start;
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+
+  .step-label:hover {
+    background: var(--cinnamon-dim);
+  }
+
+  .step-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--oat);
+    color: var(--cocoa);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .step-label input[type="checkbox"] {
+    /* The real checkbox input is present for accessibility and
+       keyboard use, but visually hidden — the number bubble
+       above doubles as its visual state indicator. */
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  .step-label input[type="checkbox"]:checked ~ .step-number {
+    background: var(--cinnamon);
+    color: var(--card);
+  }
+
+  .step-label input[type="checkbox"]:focus-visible ~ .step-number {
+    outline: 3px solid var(--cinnamon);
+    outline-offset: 2px;
+  }
+
+  .step-text {
+    padding-top: 4px;
+    line-height: 1.6;
+    color: var(--choc);
+  }
+
+  .step-label input[type="checkbox"]:checked ~ .step-text {
+    color: var(--cocoa-soft);
+  }
+
+  /* ---------- Footer note + reset control ---------- */
+  .recipe-footer {
+    margin-top: 30px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .recipe-note {
+    font-size: 0.88rem;
+    color: var(--cocoa-soft);
+    margin: 0;
+    max-width: 34ch;
+  }
+
+  .reset-button {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--cocoa);
+    background: var(--cinnamon-dim);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 10px 18px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+  }
+
+  .reset-button:hover {
+    background: var(--oat);
+  }
+
+  .reset-button:active {
+    transform: scale(0.97);
+  }
+
+  /* ---------- Top page navigation (shared row on both pages) ----------
+     A small row of two tabs — "Recipe" and "Notes" — so either page
+     can be reached from either page. The current page is shown as
+     plain highlighted text (not a link, since it's already where you
+     are); the other page is a real link. */
+  .page-nav {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+
+  .page-nav-item {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 7px 16px;
+    border-radius: 999px;
+    text-decoration: none;
+  }
+
+  a.page-nav-item {
+    color: var(--cinnamon);
+    background: transparent;
+    border: 1px solid var(--line);
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  a.page-nav-item:hover {
+    background: var(--cinnamon-dim);
+    border-color: var(--cinnamon-dim);
+  }
+
+  span.page-nav-item {
+    color: var(--cocoa);
+    background: var(--cinnamon-dim);
+  }
+
+  /* ---------- Link to the separate notes page ---------- */
+  .recipe-links {
+    text-align: center;
+    margin-top: 24px;
+  }
+
+  .recipe-links a {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--cinnamon);
+    text-decoration: underline;
+    text-decoration-color: var(--cinnamon-dim);
+    text-underline-offset: 3px;
+  }
+
+  .recipe-links a:hover {
+    color: var(--cocoa);
+    text-decoration-color: var(--cocoa-soft);
+  }
+
+  /* ---------- Small-screen adjustments ---------- */
+  @media (max-width: 420px) {
+    .recipe-meta { gap: 10px 16px; }
+    .step-label { grid-template-columns: 28px 1fr; }
+  }
+</style>
+</head>
+<body>
+
+  <!--
+    The whole recipe is wrapped in a single <main> landmark with an
+    accessible name pulled from the recipe title (via aria-labelledby),
+    so screen-reader users land straight on "Oatmeal Chocolate Chip
+    Cookies recipe" rather than a generic "main content" region.
+  -->
+  <main class="recipe-card" aria-labelledby="recipe-title">
+    <div class="card-inner">
+
+      <!-- ============ TOP PAGE NAVIGATION ============
+           Same two-tab row that appears on notes.html, so either
+           page can be reached from either page. "Recipe" is shown
+           as the current page (plain text, not a link); "Notes"
+           links to notes.html. -->
+      <nav class="page-nav" aria-label="Site pages">
+        <span class="page-nav-item" aria-current="page">Recipe</span>
+        <a class="page-nav-item" href="notes.html">Notes</a>
+      </nav>
+
+      <!-- ============ HEADER ============ -->
+      <header class="recipe-header">
+        <span class="recipe-eyebrow">A cookie jar favorite</span>
+        <h1 class="recipe-title" id="recipe-title">Oatmeal Chocolate Chip Cookies</h1>
+        <p class="recipe-meta">
+          <span><strong>Makes:</strong>&nbsp;32–35 cookies</span>
+          <span><strong>Chill:</strong>&nbsp;45 min+</span>
+          <span><strong>Bake:</strong>&nbsp;13–14 min</span>
+          <span><strong>Oven:</strong>&nbsp;350°F (177°C)</span>
+        </p>
+      </header>
+
+      <!-- ============ PHOTO ============
+           The image points to "cookies.png" sitting next to this HTML
+           file. If that file is missing or fails to load, JavaScript
+           further down swaps in a plain-text fallback so the page
+           still looks intentional rather than showing a broken-image icon. -->
+      <div class="recipe-photo-wrap" id="photo-wrap">
+        <img
+          src="cookies.png"
+          alt="A stack of golden-brown oatmeal chocolate chip cookies with melted chocolate chips visible throughout."
+          id="recipe-photo"
+        >
+        <div class="photo-fallback" role="img" aria-label="Cookie photo placeholder">
+          Add a file named "cookies.png" next to this page to show the photo here.
+        </div>
+      </div>
+
+      <!-- ============ INGREDIENTS ============ -->
+      <section class="recipe-section" aria-labelledby="ingredients-heading">
+        <h2 class="section-heading" id="ingredients-heading">
+          Ingredients
+          <span class="section-progress" id="ingredients-progress" aria-live="polite">0 of 11 gathered</span>
+        </h2>
+        <ul class="ingredients-list" id="ingredients-list">
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1 and 1/2 cups (188g) all-purpose flour (spooned &amp; leveled)</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1 teaspoon ground cinnamon (optional)</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1 teaspoon baking soda</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">3/4 teaspoon salt</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1 cup (16 Tbsp; 226g) unsalted butter, softened to room temperature</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1 cup (200g) packed dark brown sugar</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1/2 cup (100g) granulated sugar</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">2 large eggs, at room temperature</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">2 teaspoons pure vanilla extract</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">3 cups (255g) old-fashioned whole rolled oats</span>
+            </label>
+          </li>
+          <li>
+            <label class="ingredient-label">
+              <input type="checkbox" class="ingredient-checkbox">
+              <span class="ingredient-text">1 and 3/4 cups (315g) semi-sweet chocolate chips</span>
+            </label>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ============ INSTRUCTIONS ============ -->
+      <section class="recipe-section" aria-labelledby="steps-heading">
+        <h2 class="section-heading" id="steps-heading">
+          Instructions
+          <span class="section-progress" id="steps-progress" aria-live="polite">0 of 7 done</span>
+        </h2>
+        <ol class="steps-list" id="steps-list">
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">1</span>
+              <span class="step-text">In a medium bowl, whisk the flour, cinnamon, baking soda, and salt together. Set aside.</span>
+            </label>
+          </li>
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">2</span>
+              <span class="step-text">In a large bowl using a hand mixer or a stand mixer fitted with a paddle attachment, beat the butter, brown sugar, and granulated sugar together on medium-high speed until combined and creamed, about 3 minutes. Add the eggs, molasses, and vanilla and beat on high speed until combined, about 1 minute. Scrape down the sides and bottom of the bowl and beat again as needed to combine.</span>
+            </label>
+          </li>
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">3</span>
+              <span class="step-text">Add the dry ingredients to the wet ingredients and mix on low speed until combined. Beat in the oats and chocolate chips. Dough will be thick and sticky.</span>
+            </label>
+          </li>
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">4</span>
+              <span class="step-text">Cover and refrigerate the dough for at least 45 minutes in the refrigerator. If chilling for longer than a few hours, allow to sit at room temperature for at least 30 minutes before rolling and baking because the dough will be quite firm.</span>
+            </label>
+          </li>
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">5</span>
+              <span class="step-text">Preheat oven to 350°F (177°C). Line baking sheets with parchment paper or silicone baking mats. Set aside.</span>
+            </label>
+          </li>
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">6</span>
+              <span class="step-text">Use a medium cookie scoop to scoop the cookie dough, about 2 Tablespoons (40g) of dough per cookie, and place 3 inches apart on the baking sheets. Bake for 13–14 minutes or until lightly browned on the sides. The centers will look very soft.</span>
+            </label>
+          </li>
+          <li>
+            <label class="step-label">
+              <input type="checkbox" class="step-checkbox">
+              <span class="step-number" aria-hidden="true">7</span>
+              <span class="step-text">Remove from the oven and allow cookies to cool on the baking sheet for 5 minutes before transferring to a cooling rack to cool completely.</span>
+            </label>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ============ FINISHED PHOTO ============
+           A second photo, "cookies-finished.png", shown at the bottom
+           of the card to show off the finished, baked cookies. Same
+           relative-path approach and same missing-file fallback as
+           the photo up top. -->
+      <section class="recipe-section" aria-labelledby="finished-heading">
+        <h2 class="section-heading" id="finished-heading">The finished cookies</h2>
+        <div class="recipe-photo-wrap recipe-photo-wrap--bottom" id="finished-photo-wrap">
+          <img
+            src="cookies-finished.png"
+            alt="The finished oatmeal chocolate chip cookies, baked golden-brown and cooling on a rack."
+            id="finished-photo"
+          >
+          <div class="photo-fallback" role="img" aria-label="Finished cookies photo placeholder">
+            Add a file named "cookies-finished.png" next to this page to show the photo here.
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FOOTER ============ -->
+      <footer class="recipe-footer">
+        <p class="recipe-note">Tap any ingredient or step to check it off as you cook. Nothing you check is saved or sent anywhere — it just helps you track progress on this page.</p>
+        <button type="button" class="reset-button" id="reset-button">Reset checklist</button>
+      </footer>
+
+      <!-- ============ LINK TO NOTES PAGE ============
+           A plain link to a second, separate page ("notes.html") that
+           sits next to this file, where longer thoughts about the
+           recipe can live without crowding the recipe card itself. -->
+      <nav class="recipe-links" aria-label="Related pages">
+        <a href="notes.html">Read the baking notes</a>
+      </nav>
+
+    </div>
+  </main>
+
+<script>
+  // v1.0 — initial build
+  // ==========================================================
+  // All page behavior lives in this one script block. There is
+  // no server, no analytics, and no data storage of any kind —
+  // every checkbox and counter below only exists in the
+  // browser's memory for as long as this page stays open.
+  // ==========================================================
+
+  // Wait until the full page has loaded before wiring anything up,
+  // so we know every element we're about to look up already exists.
+  document.addEventListener('DOMContentLoaded', function () {
+
+    // ----------------------------------------------------------
+    // 1) PHOTO FALLBACK
+    // If "cookies.png" can't be found next to this HTML file, the
+    // <img> tag fires an "error" event. We listen for that and
+    // swap in a friendly text placeholder instead of letting the
+    // browser show a broken-image icon.
+    // ----------------------------------------------------------
+    var photo = document.getElementById('recipe-photo');
+    var photoWrap = document.getElementById('photo-wrap');
+
+    photo.addEventListener('error', function () {
+      photoWrap.classList.add('photo-missing');
+    });
+
+    // Same fallback behavior, but for the second photo at the bottom
+    // of the card ("cookies-finished.png"), showing off the baked result.
+    var finishedPhoto = document.getElementById('finished-photo');
+    var finishedPhotoWrap = document.getElementById('finished-photo-wrap');
+
+    finishedPhoto.addEventListener('error', function () {
+      finishedPhotoWrap.classList.add('photo-missing');
+    });
+
+    // ----------------------------------------------------------
+    // 2) INGREDIENT CHECKLIST PROGRESS
+    // Every time an ingredient checkbox is ticked or unticked,
+    // recount how many are checked and update the small counter
+    // next to the "Ingredients" heading (e.g. "3 of 11 gathered").
+    // ----------------------------------------------------------
+    var ingredientBoxes = Array.prototype.slice.call(
+      document.querySelectorAll('.ingredient-checkbox')
+    );
+    var ingredientsProgress = document.getElementById('ingredients-progress');
+
+    function updateIngredientsProgress() {
+      var checkedCount = ingredientBoxes.filter(function (box) {
+        return box.checked;
+      }).length;
+      ingredientsProgress.textContent =
+        checkedCount + ' of ' + ingredientBoxes.length + ' gathered';
+    }
+
+    ingredientBoxes.forEach(function (box) {
+      box.addEventListener('change', updateIngredientsProgress);
+    });
+
+    // ----------------------------------------------------------
+    // 3) STEP CHECKLIST PROGRESS
+    // Same idea as above, but for the numbered instruction steps,
+    // so a cook can see at a glance how far through the method
+    // they are (e.g. "4 of 7 done").
+    // ----------------------------------------------------------
+    var stepBoxes = Array.prototype.slice.call(
+      document.querySelectorAll('.step-checkbox')
+    );
+    var stepsProgress = document.getElementById('steps-progress');
+
+    function updateStepsProgress() {
+      var checkedCount = stepBoxes.filter(function (box) {
+        return box.checked;
+      }).length;
+      stepsProgress.textContent =
+        checkedCount + ' of ' + stepBoxes.length + ' done';
+    }
+
+    stepBoxes.forEach(function (box) {
+      box.addEventListener('change', updateStepsProgress);
+    });
+
+    // ----------------------------------------------------------
+    // 4) RESET BUTTON
+    // Unchecks every ingredient and step checkbox in one click,
+    // and refreshes both progress counters back to zero — handy
+    // for starting the recipe over the next time it's baked.
+    // ----------------------------------------------------------
+    var resetButton = document.getElementById('reset-button');
+
+    resetButton.addEventListener('click', function () {
+      ingredientBoxes.forEach(function (box) { box.checked = false; });
+      stepBoxes.forEach(function (box) { box.checked = false; });
+      updateIngredientsProgress();
+      updateStepsProgress();
+      // Return keyboard focus to a sensible place after the reset
+      // so keyboard users aren't left wondering what just happened.
+      resetButton.focus();
+    });
+
+  });
+</script>
+
+</body>
+</html>

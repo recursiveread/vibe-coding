@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<!--
+  Julia's Watercolors — a personal, single-file webpage
+  v1.0 — initial build
+
+  WHAT THIS FILE IS:
+  A single, self-contained HTML page (HTML + CSS + JS all in one file) that
+  celebrates Julia's watercolor painting hobby. No build tools, no
+  frameworks, no server, no data collection — everything runs entirely in
+  the visitor's browser.
+
+  IMAGES THIS FILE EXPECTS (place them in the SAME FOLDER as this file):
+    - plein-air.jpg   (the painting from Julia's summer plein air class)
+    - bluebird.jpg    (gallery painting)
+    - goldfinch.jpg   (gallery painting)
+    - maureen.jpg     (gallery painting)
+    - plant.jpg       (tall vertical photo, used as a decorative side border)
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Julia's Watercolor Paintings</title>
+  <meta name="description" content="A personal page about Julia's watercolor painting hobby — birds, flowers, cats, and a summer of painting outdoors." />
+
+  <!-- Google Fonts via CDN: a warm serif (Fraunces) for headings/personality,
+       paired with a clean, readable sans-serif (Inter) for body text. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================
+       DESIGN TOKENS
+       A small palette pulled from watercolor paper and pigments:
+       warm paper white, soft ink, leaf green, bluebird blue,
+       goldfinch gold, and a dusty rose (echoing a cat's nose / a
+       flower petal). Kept muted and paper-like, not glossy.
+       ========================================================== */
+    :root {
+      --paper: #F7F2E9;         /* warm, slightly textured white */
+      --paper-deep: #EFE7D8;    /* a touch deeper, for panels */
+      --ink: #2E2A24;           /* soft warm black for text */
+      --ink-soft: #5A5347;      /* muted body text */
+      --sage: #6E7F52;          /* leaf green */
+      --bluebird: #4F7591;      /* bluebird blue */
+      --goldfinch: #C99A3A;     /* goldfinch gold */
+      --rose: #B6707A;          /* dusty rose accent */
+      --line: rgba(46, 42, 36, 0.14);
+      --shadow: rgba(46, 42, 36, 0.18);
+
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+      --side-rail-width: 110px;
+    }
+
+    /* Respect users who prefer reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--font-body);
+      line-height: 1.6;
+      /* Reserve a quiet strip on the left for the decorative plant image
+         on wide screens only — see .side-rail below. */
+      padding-left: 0;
+    }
+
+    /* Visually-hidden helper for skip link + screen-reader-only text */
+    .visually-hidden {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    /* Skip-to-content link: visible on keyboard focus, for accessibility */
+    .skip-link {
+      position: absolute;
+      left: -999px;
+      top: 0;
+      background: var(--ink);
+      color: var(--paper);
+      padding: 0.75em 1.25em;
+      z-index: 100;
+      border-radius: 0 0 6px 0;
+    }
+    .skip-link:focus {
+      left: 0;
+    }
+
+    /* ==========================================================
+       DECORATIVE SIDE RAIL
+       The tall "plant.jpg" photo, used as a quiet vertical border
+       running down the left edge of the page on larger screens.
+       It's purely decorative (alt="" and aria-hidden), so screen
+       readers skip it entirely — the real content isn't affected.
+       ========================================================== */
+    .side-rail {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: var(--side-rail-width);
+      height: 100vh;
+      overflow: hidden;
+      display: none; /* shown from tablet width up, see media query */
+      border-right: 1px solid var(--line);
+    }
+    .side-rail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      filter: saturate(0.9);
+      opacity: 0.92;
+    }
+    /* A soft fade where the rail meets the page, so it reads as a
+       border rather than a cropped photo. */
+    .side-rail::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to right, transparent 70%, var(--paper) 100%);
+    }
+
+    @media (min-width: 900px) {
+      .side-rail { display: block; }
+      body { padding-left: var(--side-rail-width); }
+    }
+
+    /* ==========================================================
+       LAYOUT SHELL
+       ========================================================== */
+    .page {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+    }
+
+    header.hero {
+      padding: 4.5rem 0 2.5rem;
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(2.4rem, 6vw, 3.6rem);
+      line-height: 1.05;
+      margin: 0 0 0.6rem;
+      color: var(--ink);
+    }
+
+    .hero .tagline {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-weight: 500;
+      font-size: clamp(1.1rem, 2.4vw, 1.35rem);
+      color: var(--ink-soft);
+      max-width: 34ch;
+      margin: 0;
+    }
+
+    /* ==========================================================
+       FEATURED PLEIN AIR PIECE
+       This is the one bold, memorable moment on the page: a large
+       framed image with a short story beside/beneath it, since it's
+       the newest and most personally significant piece.
+       ========================================================== */
+    .featured {
+      margin: 3rem 0 4rem;
+    }
+
+    .featured figure {
+      margin: 0;
+      background: var(--paper-deep);
+      border: 1px solid var(--line);
+      padding: 0.9rem 0.9rem 1.1rem;
+      box-shadow: 0 18px 40px -28px var(--shadow);
+    }
+
+    .featured img {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 520px;
+      object-fit: cover;
+    }
+
+    .featured figcaption {
+      margin-top: 0.9rem;
+      font-size: 0.98rem;
+      color: var(--ink-soft);
+    }
+
+    .featured figcaption .label {
+      display: block;
+      font-family: var(--font-display);
+      font-style: italic;
+      color: var(--rose);
+      margin-bottom: 0.3rem;
+      font-size: 1rem;
+    }
+
+    /* ==========================================================
+       ABOUT SECTION
+       ========================================================== */
+    section.about {
+      margin: 0 0 4rem;
+      max-width: 62ch;
+    }
+
+    section.about h2 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(1.5rem, 3vw, 1.9rem);
+      margin: 0 0 1rem;
+    }
+
+    section.about p {
+      color: var(--ink-soft);
+      font-size: 1.05rem;
+      margin: 0 0 1rem;
+    }
+
+    section.about p:last-child { margin-bottom: 0; }
+
+    .subject-list {
+      list-style: none;
+      padding: 0;
+      margin: 1.4rem 0 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+
+    .subject-list li {
+      font-family: var(--font-display);
+      font-style: italic;
+      font-size: 0.98rem;
+      padding: 0.3rem 0.9rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      background: var(--paper-deep);
+    }
+    .subject-list li:nth-child(1) { border-color: var(--bluebird); color: var(--bluebird); }
+    .subject-list li:nth-child(2) { border-color: var(--goldfinch); color: #8a6a1f; }
+    .subject-list li:nth-child(3) { border-color: var(--rose); color: var(--rose); }
+    .subject-list li:nth-child(4) { border-color: var(--sage); color: var(--sage); }
+
+    /* ==========================================================
+       GALLERY
+       A loose, hand-arranged feel (slight vertical offsets) rather
+       than a uniform card grid — like photos pinned to a corkboard.
+       Offsets are removed at narrow widths so nothing overlaps.
+       ========================================================== */
+    section.gallery {
+      margin-bottom: 4rem;
+    }
+
+    section.gallery h2 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(1.5rem, 3vw, 1.9rem);
+      margin: 0 0 0.4rem;
+    }
+
+    section.gallery > p.intro {
+      color: var(--ink-soft);
+      margin: 0 0 2rem;
+      max-width: 55ch;
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1.6rem 1.4rem;
+    }
+
+    @media (max-width: 560px) {
+      .gallery-grid { grid-template-columns: 1fr; }
+    }
+
+    .gallery-item {
+      margin: 0;
+      background: var(--paper-deep);
+      border: 1px solid var(--line);
+      padding: 0.6rem 0.6rem 0.9rem;
+    }
+
+    /* Hand-arranged vertical offsets on wider screens only */
+    @media (min-width: 561px) {
+      .gallery-item:nth-child(2) { transform: translateY(1.6rem); }
+      .gallery-item:nth-child(3) { transform: translateY(-0.6rem); }
+    }
+
+    .gallery-item button.thumb-button {
+      display: block;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: zoom-in;
+      font: inherit;
+    }
+
+    .gallery-item img {
+      display: block;
+      width: 100%;
+      height: 230px;
+      object-fit: cover;
+    }
+
+    .gallery-item button.thumb-button:focus-visible img,
+    .gallery-item button.thumb-button:hover img {
+      outline: 3px solid var(--goldfinch);
+      outline-offset: 2px;
+    }
+
+    .gallery-item figcaption {
+      margin-top: 0.7rem;
+      font-size: 0.95rem;
+      color: var(--ink-soft);
+      text-align: left;
+    }
+
+    /* ==========================================================
+       FOOTER
+       ========================================================== */
+    footer {
+      padding: 2rem 0 4rem;
+      border-top: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    footer p { margin: 0.3rem 0; }
+
+    /* ==========================================================
+       LIGHTBOX (image viewer overlay)
+       Hidden by default; JS toggles [open] and manages focus.
+       Built with a native <dialog>-like pattern using a div, so it
+       works consistently across browsers without extra libraries.
+       ========================================================== */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(30, 27, 22, 0.86);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      z-index: 200;
+    }
+
+    .lightbox[data-open="true"] {
+      display: flex;
+    }
+
+    .lightbox .lightbox-inner {
+      max-width: min(90vw, 900px);
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .lightbox img {
+      max-width: 100%;
+      max-height: 70vh;
+      object-fit: contain;
+      box-shadow: 0 20px 60px -20px rgba(0,0,0,0.6);
+    }
+
+    .lightbox figcaption {
+      color: var(--paper);
+      font-size: 0.98rem;
+      text-align: center;
+      max-width: 60ch;
+    }
+
+    .lightbox .close-button {
+      position: absolute;
+      top: 1.2rem;
+      right: 1.4rem;
+      background: var(--paper);
+      color: var(--ink);
+      border: none;
+      width: 2.4rem;
+      height: 2.4rem;
+      border-radius: 50%;
+      font-size: 1.2rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .lightbox .close-button:focus-visible {
+      outline: 3px solid var(--goldfinch);
+      outline-offset: 2px;
+    }
+
+    /* General keyboard focus visibility across the page */
+    a:focus-visible,
+    button:focus-visible {
+      outline: 3px solid var(--goldfinch);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Skip link for keyboard/screen-reader users to bypass the decorative
+       side image and jump straight to the main content. -->
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <!-- Decorative vertical border image. aria-hidden + empty alt text mean
+       assistive tech ignores it completely — it carries no information. -->
+  <div class="side-rail" aria-hidden="true">
+    <img src="plant.jpg" alt="" />
+  </div>
+
+  <div class="page">
+
+    <header class="hero">
+      <h1>Julia's Watercolor Paintings</h1>
+      <p class="tagline">My dabblings in a new art medium.</p>
+    </header>
+
+    <main id="main-content">
+
+      <!-- ============================================================
+           FEATURED PIECE: the plein air painting. This gets the most
+           visual weight on the page since it's the newest and most
+           personally significant piece Julia mentioned.
+           ============================================================ -->
+      <section class="featured" aria-labelledby="featured-heading">
+        <h2 id="featured-heading" class="visually-hidden">Featured painting</h2>
+        <figure>
+          <img src="plein-air.jpg" alt="A watercolor painting made outdoors during Julia's plein air class" />
+          <figcaption>
+            <span class="label">Fresh off the easel</span>
+            This one was painted outdoors this summer, during my first plein air class —
+            my first time trying to capture a scene in watercolor while it was
+            actually happening in front of me, weather and all.
+          </figcaption>
+        </figure>
+      </section>
+
+      <!-- ============================================================
+           ABOUT SECTION: the personal story a visitor should walk
+           away with.
+           ============================================================ -->
+      <section class="about" aria-labelledby="about-heading">
+        <h2 id="about-heading">A little about me</h2>
+        <p>
+          I've been a hobby artist for as long as I can remember, but
+          watercolor is newer for me. A couple of years ago I picked up a
+          small watercolor set on a whim and started experimenting, and it's
+          been my favorite way to paint ever since.
+        </p>
+        <p>
+          Most of what ends up on my paper comes from the world right
+          outside my door.
+        </p>
+        <ul class="subject-list">
+          <li>Birds</li>
+          <li>Flowers</li>
+          <li>My cats</li>
+          <li>Nature scenes</li>
+        </ul>
+      </section>
+
+      <!-- ============================================================
+           GALLERY: a few example paintings. Each thumbnail is a real
+           <button> so it's fully keyboard-operable (Tab to reach it,
+           Enter or Space to open the larger view).
+           ============================================================ -->
+      <section class="gallery" aria-labelledby="gallery-heading">
+        <h2 id="gallery-heading">A few from the sketchbook</h2>
+        <p class="intro">Click or tap any painting for a closer look.</p>
+
+        <div class="gallery-grid">
+
+          <figure class="gallery-item">
+            <button
+              class="thumb-button"
+              type="button"
+              data-full-src="bluebird.jpg"
+              data-caption="A bluebird, painted from a photo I took in my backyard."
+            >
+              <img src="bluebird.jpg" alt="Watercolor painting of a bluebird" />
+            </button>
+            <figcaption>A bluebird from the backyard</figcaption>
+          </figure>
+
+          <figure class="gallery-item">
+            <button
+              class="thumb-button"
+              type="button"
+              data-full-src="goldfinch.jpg"
+              data-caption="A goldfinch, one of my favorite little visitors to paint."
+            >
+              <img src="goldfinch.jpg" alt="Watercolor painting of a goldfinch" />
+            </button>
+            <figcaption>A goldfinch, mid-visit</figcaption>
+          </figure>
+
+          <figure class="gallery-item">
+            <button
+              class="thumb-button"
+              type="button"
+              data-full-src="maureen.jpg"
+              data-caption="Maureen, who supervises most of my painting sessions."
+            >
+              <img src="maureen.jpg" alt="Watercolor painting of Julia's cat, Maureen" />
+            </button>
+            <figcaption>Maureen, keeping watch</figcaption>
+          </figure>
+
+        </div>
+      </section>
+
+    </main>
+
+    <footer>
+      <p>Painted with a small watercolor set, a lot of patience, and good light.</p>
+    </footer>
+
+  </div>
+
+  <!-- ==========================================================
+       LIGHTBOX MARKUP
+       A single reusable overlay that the JS below fills in with
+       whichever gallery image was clicked. Starts hidden.
+       ========================================================== -->
+  <div
+    class="lightbox"
+    id="lightbox"
+    data-open="false"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="lightbox-caption"
+  >
+    <button class="close-button" id="lightbox-close" type="button" aria-label="Close image">
+      &times;
+    </button>
+    <div class="lightbox-inner">
+      <img id="lightbox-image" src="" alt="" />
+      <figcaption id="lightbox-caption"></figcaption>
+    </div>
+  </div>
+
+  <script>
+    // v1.0 - initial build
+    //
+    // This script does exactly one job: it lets visitors click any
+    // gallery thumbnail to see a bigger version in a pop-up "lightbox",
+    // and lets them close it again with the close button, the Escape
+    // key, or by clicking the dark background. Nothing here talks to
+    // a server or stores any data — it only changes what's shown on
+    // screen.
+
+    // Grab references to the lightbox overlay and the pieces inside it
+    // that we'll need to update each time someone opens an image.
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImage = document.getElementById('lightbox-image');
+    const lightboxCaption = document.getElementById('lightbox-caption');
+    const closeButton = document.getElementById('lightbox-close');
+
+    // Keep track of whichever thumbnail button was clicked to open the
+    // lightbox, so that when it closes we can send keyboard focus back
+    // to that exact button instead of losing the visitor's place.
+    let lastFocusedButton = null;
+
+    // Find every gallery thumbnail button on the page. Each one carries
+    // the full-size image path and a caption in its data-* attributes.
+    const thumbButtons = document.querySelectorAll('.thumb-button');
+
+    // Opens the lightbox and fills it in with the clicked painting.
+    function openLightbox(button) {
+      const fullSrc = button.getAttribute('data-full-src');
+      const caption = button.getAttribute('data-caption');
+      const altText = button.querySelector('img').getAttribute('alt');
+
+      lightboxImage.src = fullSrc;
+      lightboxImage.alt = altText;
+      lightboxCaption.textContent = caption;
+
+      lightbox.setAttribute('data-open', 'true');
+      lastFocusedButton = button;
+
+      // Move keyboard focus to the close button so keyboard and
+      // screen-reader users land somewhere useful right away.
+      closeButton.focus();
+
+      // Prevent the page behind the overlay from scrolling while
+      // the lightbox is open.
+      document.body.style.overflow = 'hidden';
+    }
+
+    // Closes the lightbox and returns focus to whichever thumbnail
+    // opened it, so keyboard users don't lose their place on the page.
+    function closeLightbox() {
+      lightbox.setAttribute('data-open', 'false');
+      lightboxImage.src = '';
+      document.body.style.overflow = '';
+
+      if (lastFocusedButton) {
+        lastFocusedButton.focus();
+      }
+    }
+
+    // Wire up every thumbnail so clicking (or pressing Enter/Space,
+    // which buttons handle natively) opens the lightbox.
+    thumbButtons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        openLightbox(button);
+      });
+    });
+
+    // Clicking the close button closes the overlay.
+    closeButton.addEventListener('click', closeLightbox);
+
+    // Clicking the dark background (but not the image or caption
+    // itself) also closes the overlay, which is a common expected
+    // behavior for lightboxes.
+    lightbox.addEventListener('click', function (event) {
+      if (event.target === lightbox) {
+        closeLightbox();
+      }
+    });
+
+    // Pressing Escape closes the overlay from anywhere on the page,
+    // as long as it's currently open.
+    document.addEventListener('keydown', function (event) {
+      const isOpen = lightbox.getAttribute('data-open') === 'true';
+      if (isOpen && event.key === 'Escape') {
+        closeLightbox();
+      }
+    });
+  </script>
+
+</body>
+</html>
