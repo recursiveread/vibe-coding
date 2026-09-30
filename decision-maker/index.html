@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<!-- v1.0 - initial build: game show style decision maker -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Decision Show!</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap">
+<style>
+  /* Color tokens: light theme by default, dark theme below */
+  :root {
+    --bg: #fff1c9; --bg2: #ffd1e8; --text: #2a1050; --card: #ffffff;
+    --accent: #e6194b; --gold: #ffb400; --border: #2a1050; --muted: #6a4c93;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b0b40; --bg2: #4a1170; --text: #fff6d6; --card: #2b1460;
+      --accent: #ff3d6e; --gold: #ffd23f; --border: #ffd23f; --muted: #c9b3ff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b0b40; --bg2: #4a1170; --text: #fff6d6; --card: #2b1460;
+    --accent: #ff3d6e; --gold: #ffd23f; --border: #ffd23f; --muted: #c9b3ff;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; color: var(--text);
+    font-family: "Nunito", system-ui, sans-serif; font-weight: 600;
+    background: radial-gradient(circle at top, var(--bg2), var(--bg) 70%);
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 1rem; }
+  h1, .decide, .result { font-family: "Bungee", Impact, "Arial Black", sans-serif; }
+  h1 { text-align: center; font-size: clamp(1.8rem, 8vw, 3rem); margin: .5rem 0; color: var(--accent); text-shadow: 3px 3px 0 var(--gold); }
+  .tagline { text-align: center; color: var(--muted); margin-top: 0; }
+  /* Marquee frame with a dashed "bulb" border, like a game show sign */
+  .panel { background: var(--card); border: 5px dotted var(--gold); border-radius: 20px; padding: 1rem; margin: 1rem 0; }
+  .add-row { display: flex; gap: .5rem; }
+  label { display: block; font-weight: 800; margin-bottom: .4rem; }
+  input[type="text"] { flex: 1; min-width: 0; font: inherit; font-size: 1.1rem; padding: .7rem; border: 3px solid var(--border); border-radius: 12px; background: var(--card); color: var(--text); }
+  button { font: inherit; font-weight: 800; cursor: pointer; border: 3px solid var(--border); border-radius: 12px; background: var(--gold); color: #2a1050; padding: .7rem 1.1rem; }
+  button:hover { filter: brightness(1.08); }
+  :focus-visible { outline: 4px solid var(--accent); outline-offset: 3px; }
+  ul { list-style: none; margin: 1rem 0 0; padding: 0; }
+  li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .5rem .8rem; margin-top: .4rem; border-radius: 12px; background: var(--bg); word-break: break-word; }
+  li button { padding: .3rem .7rem; background: var(--accent); color: #fff; }
+  .empty { color: var(--muted); text-align: center; margin: .5rem 0 0; }
+  .decide { display: block; width: 100%; font-size: clamp(2rem, 10vw, 3.2rem); padding: 1.2rem; background: var(--accent); color: #fff; border: 5px solid var(--gold); border-radius: 24px; box-shadow: 0 8px 0 var(--gold); }
+  .decide:active { transform: translateY(4px); box-shadow: 0 4px 0 var(--gold); }
+  .decide:disabled { opacity: .7; cursor: wait; }
+  .prompt { text-align: center; font-weight: 800; padding: .8rem; border-radius: 12px; background: var(--gold); color: #2a1050; margin: 1rem 0; }
+  .prompt[hidden] { display: none; }
+  .result { text-align: center; font-size: clamp(2rem, 11vw, 4rem); line-height: 1.1; margin: 0; min-height: 1.2em; color: var(--accent); word-break: break-word; }
+  .result.spinning { color: var(--muted); }
+  .result.winner { animation: pop .6s ease; }
+  .reset { display: block; margin: 1rem auto 0; background: var(--accent); color: #fff; }
+  .reset[hidden] { display: none; }
+  .label { text-align: center; margin: 0; color: var(--muted); font-weight: 800; }
+  @keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  /* Skip motion for people who ask their device to reduce it */
+  @media (prefers-reduced-motion: reduce) { .result.winner { animation: none; } }
+</style>
+<style>
+  /* Small, fixed link in the top-left corner so it's always easy to find */
+  .home-link {
+    position: fixed; top: 12px; left: 12px;
+    z-index: 1000; /* keeps it above other content */
+    padding: 8px 14px;
+    background: #fff; color: #1f2a44;
+    font: 600 16px/1.2 system-ui, sans-serif;
+    text-decoration: none;
+    border: 2px solid #1f2a44; border-radius: 999px;
+  }
+  .home-link:hover { background: #f9d3dc; }
+  /* Clear purple outline when reached by keyboard */
+  .home-link:focus-visible { outline: 4px solid #7b4b94; outline-offset: 3px; }
+  /* Leaves room at the top so the fixed link never covers the title */
+  main { padding-top: 4rem; }
+</style>
+</head>
+<body>
+<!-- Link back to the website's home page (one folder up) -->
+<a class="home-link" href="../index.html">← Back to Home</a>
+<main>
+  <h1>🎉 Decision Show! 🎉</h1>
+  <p class="tagline">Can't choose? Let the wheel of fate decide!</p>
+
+  <!-- Section where the player types in a new option -->
+  <section class="panel" aria-labelledby="add-title">
+    <form id="add-form">
+      <label id="add-title" for="option-input">Enter an option</label>
+      <div class="add-row">
+        <input type="text" id="option-input" maxlength="80" autocomplete="off" placeholder="e.g. Pizza night">
+        <button type="submit">Add</button>
+      </div>
+    </form>
+    <ul id="option-list" aria-label="Your options"></ul>
+    <p id="empty-note" class="empty">No options yet. Add at least 2!</p>
+  </section>
+
+  <button type="button" id="decide-btn" class="decide">DECIDE!</button>
+
+  <!-- Friendly message shown when there are fewer than 2 options (role=status announces it to screen readers) -->
+  <p id="prompt" class="prompt" role="status" hidden>Whoa there, contestant! Add at least 2 options to play. 🎤</p>
+
+  <!-- Big result area; aria-live makes screen readers read out the winner -->
+  <section class="panel" aria-labelledby="result-label">
+    <p id="result-label" class="label">And the winner is...</p>
+    <p id="result" class="result" aria-live="polite">?</p>
+  </section>
+
+  <!-- Only appears after a decision is made; clears all options for a fresh round -->
+  <button type="button" id="reset-btn" class="reset" hidden>Reset</button>
+</main>
+
+<script>
+  // v1.0 - initial build
+  // Everything runs in the browser only. Nothing is saved or sent anywhere.
+
+  // The list of options the player has entered so far
+  const options = [];
+
+  // Grab the page elements we need to control
+  const form = document.getElementById('add-form');
+  const input = document.getElementById('option-input');
+  const list = document.getElementById('option-list');
+  const emptyNote = document.getElementById('empty-note');
+  const decideBtn = document.getElementById('decide-btn');
+  const prompt = document.getElementById('prompt');
+  const result = document.getElementById('result');
+  const resetBtn = document.getElementById('reset-btn');
+
+  // Redraws the option list on screen so it always matches the options array
+  function renderList() {
+    list.innerHTML = '';
+    options.forEach((text, index) => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.textContent = text; // textContent keeps typed text safe (no HTML injection)
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', 'Remove option: ' + text);
+      // Clicking Remove deletes this option and redraws the list
+      remove.addEventListener('click', () => {
+        options.splice(index, 1);
+        renderList();
+        input.focus(); // keep keyboard users in a sensible spot
+      });
+      li.append(span, remove);
+      list.appendChild(li);
+    });
+    // Only show the "no options yet" note when the list is empty
+    emptyNote.hidden = options.length > 0;
+    // Hide the friendly warning once the player has enough options
+    if (options.length >= 2) prompt.hidden = true;
+  }
+
+  // When the form is submitted (Add button OR pressing Enter), add the option
+  form.addEventListener('submit', (event) => {
+    event.preventDefault(); // stop the page from reloading
+    const text = input.value.trim(); // remove stray spaces
+    if (!text) { input.focus(); return; } // ignore blank entries
+    options.push(text);
+    input.value = '';
+    renderList();
+    input.focus(); // ready for the next option
+  });
+
+  // When Decide is pressed, pick a random option with a short suspense "spin"
+  decideBtn.addEventListener('click', () => {
+    // Fewer than 2 options: show the friendly prompt and stop
+    if (options.length < 2) {
+      prompt.hidden = false;
+      result.textContent = '?';
+      result.className = 'result';
+      input.focus();
+      return;
+    }
+    prompt.hidden = true;
+
+    // Choose the winner up front using a random index
+    const winner = options[Math.floor(Math.random() * options.length)];
+
+    // Respect reduced-motion settings: skip the spin and reveal right away
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { showWinner(winner); return; }
+
+    // Disable the button and flash random options for about 1.5 seconds
+    decideBtn.disabled = true;
+    resetBtn.hidden = true; // hide Reset while the spin is running
+    result.className = 'result spinning';
+    result.removeAttribute('aria-live'); // avoid reading every flashing name aloud
+    const spin = setInterval(() => {
+      result.textContent = options[Math.floor(Math.random() * options.length)];
+    }, 90);
+
+    // After the spin, stop flashing and reveal the real winner
+    setTimeout(() => {
+      clearInterval(spin);
+      result.setAttribute('aria-live', 'polite');
+      showWinner(winner);
+      decideBtn.disabled = false;
+    }, 1500);
+  });
+
+  // Shows the chosen option in big text with a pop animation
+  function showWinner(winner) {
+    result.className = 'result';
+    void result.offsetWidth; // restart the animation if it played before
+    result.textContent = winner;
+    result.className = 'result winner';
+    resetBtn.hidden = false; // a decision was made, so offer the Reset button
+  }
+
+  // When Reset is pressed, clear every option and return to the starting screen
+  resetBtn.addEventListener('click', () => {
+    options.length = 0; // empties the options list
+    renderList(); // redraws the (now empty) list
+    result.textContent = '?'; // put the placeholder back
+    result.className = 'result';
+    prompt.hidden = true;
+    resetBtn.hidden = true; // hide Reset until the next decision
+    input.focus(); // ready to type new options
+  });
+
+  // Draw the empty list once when the page first loads
+  renderList();
+</script>
+</body>
+</html>
