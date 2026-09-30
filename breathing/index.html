@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<!-- v1.0 - initial build: box breathing timer (4s in, 4s hold, 4s out, 4s hold) -->
+<!-- v1.1 - added "Back to home" link -->
+<!-- v1.2 - darker teal (#77bfa3) is now the page background; circle and buttons recolored to match -->
+<!-- v1.3 - teal softened to a more muted shade (#86b0a2) -->
+<!-- v1.4 - added pattern selector: box breathing (4-4-4-4) or 6-7-8 (in 6, hold 7, out 8, no second hold) -->
+<!-- v1.5 - heading is now a fixed "Breathing Buddy" instead of changing with the selected pattern -->
+<!-- v1.6 - heading size matched to the "Press Start" phrase (1.75rem) -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Breathing Buddy</title>
+  <style>
+    /* ---------- Colors and sizes, defined once so they are easy to change ---------- */
+    :root {
+      --sage: #bfd8bd;        /* soft sage green: outer guide ring, button borders */
+      --cream: #dde7c7;       /* pale green-cream: page background */
+      --mint: #86b0a2;        /* muted teal: the page background (softened from #77bfa3) */
+      --ink: #1f3d33;         /* deep green for text, dark enough to read on the mint */
+      --size: clamp(200px, 60vmin, 380px); /* circle size, scales with the screen */
+      --phase-time: 4s;       /* how long each stage lasts (JS sets the real duration) */
+    }
+
+    * { box-sizing: border-box; }
+
+    /* Page layout: everything centered in the middle of the screen */
+    body {
+      margin: 0;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--mint);  /* darker teal page background */
+      color: var(--ink);
+      font-family: ui-rounded, "Nunito", "Varela Round", "Trebuchet MS", system-ui, sans-serif;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.75rem; /* same size as the "Press Start" phrase */
+      font-weight: 600;
+    }
+
+    /* The stage holds the circle and the countdown; it never changes size */
+    .stage {
+      position: relative;
+      width: var(--size);
+      height: var(--size);
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--sage);  /* the still ring shows how big the circle will get */
+    }
+
+    /* The breathing circle: only this element grows and shrinks */
+    .orb {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: var(--cream); /* pale circle stands out on the teal page */
+      transform: scale(0.55);   /* starting (empty lungs) size */
+      transition-property: transform;
+      transition-timing-function: ease-in-out; /* gentle start and finish */
+      transition-duration: 0s;
+    }
+
+    /* The countdown sits on top of the circle and stays the same size */
+    .count {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: calc(var(--size) * 0.3);
+      font-weight: 700;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    /* The phrase under the circle: reserve height so the buttons never jump */
+    .phase {
+      margin: 0;
+      min-height: 2.2rem;
+      font-size: 1.75rem;
+      font-weight: 600;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    button {
+      min-width: 6rem;
+      padding: 0.75rem 1.5rem;
+      font: inherit;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--cream);
+      border: 2px solid var(--cream);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: transparent;
+      border-color: var(--ink);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Clear outline for keyboard users */
+    button:focus-visible {
+      outline: 3px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    /* For people who prefer less motion: the circle does not scale; it just
+       changes shade (lighter when full, darker when empty) */
+    @media (prefers-reduced-motion: reduce) {
+      .orb {
+        transform: none !important;
+        transition-property: background-color;
+      }
+      .orb.is-full { background: #f6f9ec; }
+    }
+
+    /* Visually hidden text that screen readers still announce */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    /* Pattern selector: two pill-shaped choices built from real radio buttons */
+    .patterns {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    /* The round radio dot is hidden visually, but stays usable by keyboard and screen reader */
+    .patterns input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .patterns label {
+      padding: 0.5rem 1.1rem;
+      font-weight: 600;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    /* The chosen pattern is filled in dark green */
+    .patterns input:checked + label {
+      background: var(--ink);
+      color: var(--cream);
+    }
+
+    .patterns input:focus-visible + label {
+      outline: 3px solid var(--ink);
+      outline-offset: 3px;
+    }
+
+    /* Choices are locked while the timer is running */
+    .patterns input:disabled + label {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* Small, fixed link in the top-left corner so it's always easy to find */
+    .home-link {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 1000; /* keeps it above other content */
+      padding: 8px 14px;
+      background: #fff;
+      color: #1f2a44;
+      font: 600 16px/1.2 system-ui, sans-serif;
+      text-decoration: none;
+      border: 2px solid #1f2a44;
+      border-radius: 999px;
+    }
+
+    .home-link:hover {
+      background: #f9d3dc;
+    }
+
+    /* Clear purple outline when reached by keyboard */
+    .home-link:focus-visible {
+      outline: 4px solid #7b4b94;
+      outline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Link back to the home page (one folder up from this app's folder) -->
+  <a class="home-link" href="../index.html">Back to home</a>
+
+  <main>
+    <h1>Breathing Buddy</h1>
+
+    <!-- Choose a breathing pattern. Arrow keys switch between the two choices. -->
+    <fieldset class="patterns">
+      <legend class="sr-only">Breathing pattern</legend>
+      <input type="radio" name="pattern" id="pattern-box" value="box" checked>
+      <label for="pattern-box">Box (4-4-4-4)</label>
+      <input type="radio" name="pattern" id="pattern-678" value="678">
+      <label for="pattern-678">6-7-8</label>
+    </fieldset>
+
+    <!-- The circle and countdown. The picture is decorative, so it is hidden from screen readers;
+         the phrase below carries the meaning. -->
+    <div class="stage" aria-hidden="true">
+      <div class="orb" id="orb"></div>
+      <div class="count" id="count">4</div>
+    </div>
+
+    <!-- The stage phrase. aria-live makes screen readers announce each change politely. -->
+    <p class="phase" id="phase" role="status" aria-live="polite">Press Start</p>
+
+    <div class="controls" role="group" aria-label="Timer controls">
+      <button type="button" id="start">Start</button>
+      <button type="button" id="stop" class="secondary" disabled>Stop</button>
+      <button type="button" id="reset" class="secondary">Reset</button>
+    </div>
+  </main>
+
+  <script>
+    // v1.0 - initial build
+
+    // ---------- 1. The breathing patterns the user can choose from ----------
+    // Each pattern is a list of stages, played in order and then repeated.
+    // label: phrase shown under the circle
+    // ms:    how long the stage lasts, in milliseconds (4000 = 4 seconds)
+    // scale: how big the circle should be at the END of the stage
+    //        (1 = full size, 0.55 = small). A "hold" keeps the size it already has.
+    var SMALL_SCALE = 0.55;   // circle size when lungs are "empty"
+
+    var PATTERNS = {
+      // Box breathing: in 4, hold 4, out 4, hold 4
+      box: {
+        stages: [
+          { label: "Breathe in",  ms: 4000, scale: 1 },
+          { label: "Hold",        ms: 4000, scale: 1 },
+          { label: "Breathe out", ms: 4000, scale: SMALL_SCALE },
+          { label: "Hold",        ms: 4000, scale: SMALL_SCALE }
+        ]
+      },
+      // 6-7-8 breathing: in 6, hold 7, out 8, and no second hold
+      "678": {
+        stages: [
+          { label: "Breathe in",  ms: 6000, scale: 1 },
+          { label: "Hold",        ms: 7000, scale: 1 },
+          { label: "Breathe out", ms: 8000, scale: SMALL_SCALE }
+        ]
+      }
+    };
+
+    // The stages of the pattern that is currently selected (starts with box breathing)
+    var STAGES = PATTERNS.box.stages;
+
+    // ---------- 2. Grab the page elements we need to change ----------
+    var patternInputs = document.querySelectorAll('input[name="pattern"]');
+    var orb = document.getElementById("orb");
+    var countEl = document.getElementById("count");
+    var phaseEl = document.getElementById("phase");
+    var startBtn = document.getElementById("start");
+    var stopBtn = document.getElementById("stop");
+    var resetBtn = document.getElementById("reset");
+
+    // ---------- 3. Timer memory ----------
+    var stageIndex = 0;       // which stage we are in (0 is the first stage of the pattern)
+    var remainingMs = STAGES[0].ms; // time left in the current stage
+    var stageEndTime = 0;     // the clock time when the current stage will finish
+    var ticker = null;        // the repeating check that updates the countdown
+    var running = false;      // true while the timer is going
+
+    // ---------- 4. Show the countdown number ----------
+    // Rounds UP so the display counts down to 1 and never shows 0
+    // (for example 4, 3, 2, 1 in box breathing, or 8, 7, 6 ... 1 when breathing out in 6-7-8).
+    function showCount(ms) {
+      countEl.textContent = Math.max(1, Math.ceil(ms / 1000));
+    }
+
+    // ---------- 5. Move the circle toward a size over some time ----------
+    // Setting a CSS transition lets the browser animate smoothly for us.
+    function animateOrb(targetScale, durationMs) {
+      orb.style.transitionDuration = durationMs + "ms";
+      orb.style.transform = "scale(" + targetScale + ")";
+      // Used only by the reduced-motion style (shade change instead of size change)
+      orb.classList.toggle("is-full", targetScale === 1);
+    }
+
+    // ---------- 6. Freeze the circle at its current size (used by Stop) ----------
+    // We read the size the circle has right now, then lock it in place.
+    function freezeOrb() {
+      var matrix = getComputedStyle(orb).transform;   // looks like "matrix(a, b, c, d, e, f)"
+      orb.style.transitionDuration = "0ms";
+      if (matrix && matrix !== "none") {
+        orb.style.transform = matrix;
+      }
+    }
+
+    // ---------- 7. Begin (or continue) the current stage ----------
+    function beginStage() {
+      var stage = STAGES[stageIndex];
+      phaseEl.textContent = stage.label;
+      showCount(remainingMs);
+      stageEndTime = Date.now() + remainingMs;
+      // Animate for however much time is left, so a resumed stage still ends on time.
+      animateOrb(stage.scale, remainingMs);
+    }
+
+    // ---------- 8. Check the clock a few times per second ----------
+    function tick() {
+      var left = stageEndTime - Date.now();
+      if (left <= 0) {
+        // This stage is finished: move to the next one (looping back to the first stage after the last).
+        stageIndex = (stageIndex + 1) % STAGES.length;
+        remainingMs = STAGES[stageIndex].ms;
+        beginStage();
+      } else {
+        remainingMs = left;
+        showCount(left);
+      }
+    }
+
+    // ---------- 9. Start button ----------
+    function start() {
+      if (running) return;
+      running = true;
+      setPatternChoiceEnabled(false); // no switching patterns mid-breath
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      stopBtn.focus(); // keeps keyboard focus on a usable button
+      // Force the browser to register the circle's current size before animating from it.
+      void orb.offsetWidth;
+      beginStage();
+      ticker = setInterval(tick, 100);
+    }
+
+    // ---------- 10. Stop button (pauses; Start continues from here) ----------
+    function stop() {
+      if (!running) return;
+      running = false;
+      clearInterval(ticker);
+      // Save how much time was left so Start can pick up exactly here.
+      remainingMs = Math.max(0, stageEndTime - Date.now());
+      freezeOrb();
+      setPatternChoiceEnabled(true); // switching now will reset the timer
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      startBtn.textContent = "Resume";
+      startBtn.focus();
+    }
+
+    // ---------- 11. Reset button (back to the very beginning) ----------
+    function reset() {
+      running = false;
+      clearInterval(ticker);
+      stageIndex = 0;
+      remainingMs = STAGES[0].ms;
+      // Snap the circle back to its small starting size without animating.
+      orb.style.transitionDuration = "0ms";
+      orb.style.transform = "scale(" + SMALL_SCALE + ")";
+      orb.classList.remove("is-full");
+      setPatternChoiceEnabled(true);
+      showCount(STAGES[0].ms);
+      phaseEl.textContent = "Press Start";
+      startBtn.textContent = "Start";
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    // ---------- 12. Turn the pattern choices on or off ----------
+    // While the timer is running the choices are locked so a breath is never cut short.
+    function setPatternChoiceEnabled(enabled) {
+      for (var i = 0; i < patternInputs.length; i++) {
+        patternInputs[i].disabled = !enabled;
+      }
+    }
+
+    // ---------- 13. Switch to a different breathing pattern ----------
+    // Looks up the chosen pattern and resets the timer
+    // so it starts fresh with the new stages and timings.
+    function choosePattern(key) {
+      STAGES = PATTERNS[key].stages;
+      reset();
+    }
+
+    // ---------- 14. Connect the buttons and choices to their actions ----------
+    startBtn.addEventListener("click", start);
+    stopBtn.addEventListener("click", stop);
+    resetBtn.addEventListener("click", reset);
+    for (var i = 0; i < patternInputs.length; i++) {
+      patternInputs[i].addEventListener("change", function (event) {
+        choosePattern(event.target.value);
+      });
+    }
+  </script>
+</body>
+</html>
