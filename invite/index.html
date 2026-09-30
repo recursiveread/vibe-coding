@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<!-- v1.0 - initial build: fall campfire party invitation, reads invitee name from ?to= -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>You're invited! Fall Campfire Party</title>
+  <meta name="description" content="Fall campfire party, Sunday, November 1, 4:00 to 8:00 pm, to celebrate a new patio and firepit.">
+
+  <!-- Optional cozy fonts from Google Fonts. If they can't load, the fallback fonts below are used. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;700&family=Lobster&display=swap" rel="stylesheet">
+
+  <style>
+    /* v1.0 - Color and font "tokens" so the whole theme can be changed in one place */
+    :root {
+      --night: #1a120e;        /* deep night-sky brown, page background */
+      --night-soft: #2a1c15;   /* slightly lighter brown, card background */
+      --cream: #fbf0dc;        /* warm off-white for text (high contrast on the dark) */
+      --ember: #ff9a3c;        /* glowing orange for the headline and accents */
+      --flame: #ffd166;        /* bright yellow for flame highlights */
+      --maple: #c8432b;        /* maple-leaf red for small accents */
+      --font-display: "Lobster", "Brush Script MT", cursive;
+      --font-body: "Bitter", Georgia, "Times New Roman", serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at 50% 0%, #4a2a17 0%, transparent 60%),
+        var(--night);
+      color: var(--cream);
+      font-family: var(--font-body);
+      font-size: 1.125rem;      /* 18px base text keeps it easy to read */
+      line-height: 1.65;
+      display: flex;
+      justify-content: center;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    /* The invitation "card" that holds everything */
+    main {
+      width: 100%;
+      max-width: 36rem;
+      text-align: center;
+    }
+
+    /* ---- Campfire (the one big visual moment) ---- */
+    .fire {
+      position: relative;
+      width: 9rem;
+      height: 9rem;
+      margin: 1rem auto 0;
+    }
+    .fire svg { width: 100%; height: 100%; overflow: visible; }
+
+    /* The flames sway and flicker by scaling from the bottom */
+    .flame-outer, .flame-mid, .flame-inner {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      animation: flicker 1.6s ease-in-out infinite alternate;
+    }
+    .flame-mid   { animation-duration: 1.2s; }
+    .flame-inner { animation-duration: 0.9s; }
+    @keyframes flicker {
+      from { transform: scale(1, 1) rotate(-2deg); }
+      to   { transform: scale(0.94, 1.08) rotate(2deg); }
+    }
+
+    /* Little sparks that float up from the fire */
+    .spark {
+      position: absolute;
+      bottom: 45%;
+      left: 50%;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--flame);
+      opacity: 0;
+      animation: rise 3.5s ease-out infinite;
+    }
+    .spark:nth-child(2) { margin-left: -1.2rem; animation-delay: 1.1s; }
+    .spark:nth-child(3) { margin-left: 1.3rem;  animation-delay: 2.2s; }
+    @keyframes rise {
+      0%   { transform: translateY(0); opacity: 0.9; }
+      100% { transform: translateY(-6rem) translateX(0.6rem); opacity: 0; }
+    }
+
+    /* ---- Headline and intro text ---- */
+    h1 {
+      font-family: var(--font-display);
+      font-weight: 400;
+      font-size: clamp(2.6rem, 11vw, 4.2rem);
+      line-height: 1.1;
+      margin: 1rem 0 0.5rem;
+      color: var(--ember);
+      text-shadow: 0 0 24px rgba(255, 154, 60, 0.35);
+      overflow-wrap: anywhere;   /* long names wrap instead of overflowing */
+    }
+
+    .subtitle {
+      font-size: 1.35rem;
+      margin: 0 0 2rem;
+    }
+
+    /* ---- The details card ---- */
+    .details {
+      background: var(--night-soft);
+      border: 2px solid #5a3a26;
+      border-radius: 1rem;
+      padding: 1.5rem 1.25rem;
+      margin: 0 0 1.5rem;
+      text-align: left;
+    }
+    .details dl { margin: 0; }
+    .details dt {
+      font-weight: 700;
+      color: var(--flame);
+      margin-top: 1.1rem;
+    }
+    .details dt:first-child { margin-top: 0; }
+    .details dd { margin: 0.15rem 0 0; }
+
+    /* ---- Closing line ---- */
+    .closing {
+      font-family: var(--font-display);
+      font-size: 1.8rem;
+      color: var(--ember);
+      margin: 2rem 0 0;
+    }
+
+    /* Respect visitors who prefer less motion: turn all animation off */
+    @media (prefers-reduced-motion: reduce) {
+      .flame-outer, .flame-mid, .flame-inner, .spark { animation: none; }
+      .spark { display: none; }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <!-- Decorative campfire; hidden from screen readers because it carries no information -->
+    <div class="fire" aria-hidden="true">
+      <span class="spark"></span><span class="spark"></span><span class="spark"></span>
+      <svg viewBox="0 0 100 100" focusable="false">
+        <!-- Three stacked flame shapes, biggest and reddest at the back -->
+        <path class="flame-outer" d="M50 6 C60 26 82 40 80 64 C78 82 64 90 50 90 C36 90 22 82 20 64 C18 44 38 32 50 6 Z" fill="#c8432b"/>
+        <path class="flame-mid" d="M50 26 C58 42 72 52 70 68 C68 80 60 86 50 86 C40 86 32 80 30 68 C28 54 42 44 50 26 Z" fill="#ff9a3c"/>
+        <path class="flame-inner" d="M50 50 C55 60 62 66 60 74 C59 81 55 84 50 84 C45 84 41 81 40 74 C38 66 45 60 50 50 Z" fill="#ffd166"/>
+        <!-- Two logs crossed under the flames -->
+        <rect x="14" y="86" width="72" height="9" rx="4.5" fill="#6b4226" transform="rotate(-8 50 90)"/>
+        <rect x="14" y="86" width="72" height="9" rx="4.5" fill="#8a5a36" transform="rotate(8 50 90)"/>
+      </svg>
+    </div>
+
+    <!-- The greeting. The text is filled in by the script below; "You're invited!" is the fallback. -->
+    <h1 id="greeting" aria-live="polite">You're invited!</h1>
+    <p class="subtitle">Join me for a fall evening campfire party to celebrate my new patio and firepit.</p>
+
+    <section class="details" aria-labelledby="details-heading">
+      <h2 id="details-heading" class="visually-hidden" style="position:absolute;left:-9999px;">Party details</h2>
+      <dl>
+        <dt>When</dt>
+        <dd>Sunday, November 1<br>4:00 to 8:00 pm</dd>
+
+        <dt>Where</dt>
+        <dd>My backyard, by the new patio and firepit</dd>
+
+        <dt>What we'll do</dt>
+        <dd>Dinner will be served first. Then we'll gather around the firepit for s'mores and hot chocolate.</dd>
+
+        <dt>Good to know</dt>
+        <dd>We'll be outside, so bring a warm jacket.</dd>
+      </dl>
+    </section>
+
+    <p class="closing">Hope to see you there!</p>
+  </main>
+
+  <script>
+    // v1.0 - Read the invitee's name from the web address and personalize the greeting.
+
+    // Step 1: Look at the part of the address after the "?" (for example "?to=Sam").
+    var params = new URLSearchParams(window.location.search);
+
+    // Step 2: Get the value of "to", remove extra spaces, and keep it to a sensible length.
+    var name = (params.get('to') || '').trim().slice(0, 40);
+
+    // Step 3: Find the headline element on the page.
+    var greeting = document.getElementById('greeting');
+
+    // Step 4: If a name was given, greet them personally. Otherwise the general
+    // "You're invited!" already in the HTML stays as it is.
+    if (name) {
+      // textContent (not innerHTML) makes sure anything typed into the address
+      // is shown as plain text and can never run as code.
+      greeting.textContent = name + ", you're invited!";
+
+      // Step 5: Also personalize the browser tab title.
+      document.title = name + ", you're invited! Fall Campfire Party";
+    }
+  </script>
+</body>
+</html>
