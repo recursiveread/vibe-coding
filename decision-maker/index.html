@@ -58,6 +58,8 @@
   .result.winner { animation: pop .6s ease; }
   .reset { display: block; margin: 1rem auto 0; background: var(--accent); color: #fff; }
   .reset[hidden] { display: none; }
+  .copy { display: block; margin: 1rem auto 0; }
+  .copy-status { text-align: center; font-weight: 800; color: var(--muted); margin: .5rem 0 0; min-height: 1.2em; word-break: break-all; }
   .label { text-align: center; margin: 0; color: var(--muted); font-weight: 800; }
   @keyframes pop { 0% { transform: scale(.6); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
   /* Skip motion for people who ask their device to reduce it */
@@ -99,6 +101,9 @@
     </form>
     <ul id="option-list" aria-label="Your options"></ul>
     <p id="empty-note" class="empty">No options yet. Add at least 2!</p>
+    <!-- Copies a shareable link that contains the current options -->
+    <button type="button" id="copy-btn" class="copy">Copy Link</button>
+    <p id="copy-status" class="copy-status" role="status"></p>
   </section>
 
   <button type="button" id="decide-btn" class="decide">DECIDE!</button>
@@ -118,6 +123,8 @@
 
 <script>
   // v1.0 - initial build
+  // v1.1 - added Copy Link button and loading options from ?options= in the URL
+  // v1.2 - page address now updates with the current options whenever the list changes
   // Everything runs in the browser only. Nothing is saved or sent anywhere.
 
   // The list of options the player has entered so far
@@ -157,6 +164,8 @@
     emptyNote.hidden = options.length > 0;
     // Hide the friendly warning once the player has enough options
     if (options.length >= 2) prompt.hidden = true;
+    // Keep the page address in sync with the current options
+    updateAddressBar();
   }
 
   // When the form is submitted (Add button OR pressing Enter), add the option
@@ -227,7 +236,73 @@
     input.focus(); // ready to type new options
   });
 
-  // Draw the empty list once when the page first loads
+  // ----- Share link feature (v1.1) -----
+
+  // Builds a link to this page with the current options, like ?options=pizza,tacos,sushi
+  function buildLink() {
+    // Start from the page address without any existing "?..." or "#..." part
+    const base = location.href.split('#')[0].split('?')[0];
+    if (options.length === 0) return base;
+    // encodeURIComponent makes each option URL-safe (a comma inside an option becomes %2C),
+    // then we join the options with plain commas
+    return base + '?options=' + options.map(encodeURIComponent).join(',');
+  }
+
+  // Updates the page address to match the current options WITHOUT reloading the page.
+  // replaceState swaps the address in place, so the Back button isn't filled with every change.
+  function updateAddressBar() {
+    try {
+      history.replaceState(null, '', buildLink());
+    } catch (e) {
+      // Some environments (like sandboxed previews) don't allow changing the address; that's fine, skip it
+    }
+  }
+
+  // Reads the options from the address bar (if any) and returns them as a list
+  function readOptionsFromUrl() {
+    // Look at the raw text of the URL so commas inside options (%2C) are not mistaken for separators
+    const match = location.search.match(/[?&]options=([^&]*)/);
+    if (!match) return [];
+    return match[1]
+      .split(',') // split on the plain commas between options
+      .map((piece) => {
+        try { return decodeURIComponent(piece.replace(/\+/g, ' ')).trim(); }
+        catch (e) { return piece.trim(); } // if the text is badly encoded, use it as-is
+      })
+      .filter((text) => text.length > 0) // drop empty entries
+      .map((text) => text.slice(0, 80)); // same 80 character limit as the input box
+  }
+
+  // When Copy Link is pressed, copy the link and tell the player what happened
+  const copyBtn = document.getElementById('copy-btn');
+  const copyStatus = document.getElementById('copy-status');
+  copyBtn.addEventListener('click', async () => {
+    const link = buildLink();
+    try {
+      // Modern way to copy text to the clipboard
+      await navigator.clipboard.writeText(link);
+      copyStatus.textContent = 'Link copied! 🎉';
+    } catch (e) {
+      // Fallback for browsers that block the modern way: copy from a temporary hidden box
+      const temp = document.createElement('textarea');
+      temp.value = link;
+      temp.setAttribute('readonly', '');
+      temp.style.position = 'fixed';
+      temp.style.opacity = '0';
+      document.body.appendChild(temp);
+      temp.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      temp.remove();
+      // If copying still fails, show the link so the player can copy it by hand
+      copyStatus.textContent = ok ? 'Link copied! 🎉' : 'Copy this link: ' + link;
+    }
+  });
+
+  // If the page was opened with options in the URL, start with that list
+  options.push(...readOptionsFromUrl());
+
+  // Draw the option list once when the page first loads
   renderList();
 </script>
 </body>
