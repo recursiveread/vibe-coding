@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<!-- v1.0 - initial build: HyperCard-style haunted house adventure -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Haunted House</title>
+<style>
+  /* Black and white only, like a 1980s Mac. Fonts fall back to whatever monospace is installed. */
+  :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; padding: 12px; min-height: 100vh;
+    background: #fff; color: #000;
+    /* Classic checkerboard desktop pattern */
+    background-image: linear-gradient(45deg,#000 25%,transparent 25%,transparent 75%,#000 75%),
+                      linear-gradient(45deg,#000 25%,transparent 25%,transparent 75%,#000 75%);
+    background-size: 4px 4px; background-position: 0 0, 2px 2px;
+    font-family: Chicago, Geneva, "Courier New", monospace; font-size: 18px; line-height: 1.4;
+  }
+  /* The Mac window */
+  .window { max-width: 640px; margin: 0 auto; background: #fff; border: 2px solid #000; box-shadow: 5px 5px 0 #000; }
+  .titlebar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 2px solid #000;
+    background: repeating-linear-gradient(#000 0 1px, #fff 1px 3px); }
+  .titlebar span { background: #fff; padding: 0 10px; font-weight: bold; margin: 0 auto; }
+  .closebox { width: 14px; height: 14px; border: 2px solid #000; background: #fff; }
+  main { padding: 14px; }
+  .art { border: 2px solid #000; background: #fff; margin-bottom: 12px; }
+  .art svg { display: block; width: 100%; height: auto; stroke: #000; fill: #fff; stroke-width: 1.1; shape-rendering: crispEdges; }
+  h1 { font-size: 1.1em; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+  h1:focus { outline: none; }
+  .story p { margin: 0 0 8px; }
+  .end { display: inline-block; border: 2px solid #000; padding: 2px 12px; font-weight: bold; margin: 4px 0 8px; }
+  ol { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+  /* HyperCard-style rounded buttons that invert when pressed or focused */
+  button { font: inherit; width: 100%; text-align: left; padding: 8px 14px; background: #fff; color: #000;
+    border: 2px solid #000; border-radius: 10px; box-shadow: 2px 2px 0 #000; cursor: pointer; min-height: 44px; }
+  button:hover, button:focus-visible { background: #000; color: #fff; outline: 3px solid #000; outline-offset: 2px; }
+  button:active { box-shadow: none; transform: translate(2px,2px); }
+  .toolbar { border-top: 2px solid #000; padding: 6px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+  .toolbar button { width: auto; min-height: 32px; padding: 2px 10px; font-size: 14px; }
+  @media (max-width: 480px) { body { font-size: 16px; padding: 6px; } }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+</style>
+<style>
+  /* Small, fixed link in the top-left corner so it's always easy to find */
+  .home-link {
+    position: fixed; top: 12px; left: 12px;
+    z-index: 1000; /* keeps it above other content */
+    padding: 8px 14px; background: #fff; color: #1f2a44;
+    font: 600 16px/1.2 system-ui, sans-serif; text-decoration: none;
+    border: 2px solid #1f2a44; border-radius: 999px;
+  }
+  .home-link:hover { background: #f9d3dc; }
+  /* Clear purple outline when reached by keyboard */
+  .home-link:focus-visible { outline: 4px solid #7b4b94; outline-offset: 3px; }
+  /* Leave room at the top so the link never covers the game window */
+  body { padding-top: 60px; }
+</style>
+</head>
+<body>
+<!-- Back to home link (change the href if your home page lives somewhere else) -->
+<a class="home-link" href="../index.html">&larr; Back to Home</a>
+<!-- Shared dither patterns used by the pictures (hidden; they only provide fills) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <pattern id="d12" width="2.6667" height="2.6667" patternUnits="userSpaceOnUse"><rect width="0.6667" height="0.6667" fill="#000" stroke="none"/></pattern>
+  <pattern id="d25" width="1.3333" height="1.3333" patternUnits="userSpaceOnUse"><rect width="0.6667" height="0.6667" fill="#000" stroke="none"/></pattern>
+  <pattern id="d50" width="1.3333" height="1.3333" patternUnits="userSpaceOnUse"><rect width="0.6667" height="0.6667" fill="#000" stroke="none"/><rect x="0.6667" y="0.6667" width="0.6667" height="0.6667" fill="#000" stroke="none"/></pattern>
+  <pattern id="d75" width="1.3333" height="1.3333" patternUnits="userSpaceOnUse"><rect width="1.3333" height="1.3333" fill="#000" stroke="none"/><rect x="0.6667" y="0.6667" width="0.6667" height="0.6667" fill="#fff" stroke="none"/></pattern>
+  <pattern id="hatch" width="2.6667" height="2.6667" patternUnits="userSpaceOnUse"><rect width="2.6667" height="2.6667" fill="#fff" stroke="none"/><path d="M0 2.6667L2.6667 0" stroke="#000" stroke-width="0.6"/></pattern>
+  <pattern id="tile" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#fff" stroke="none"/><rect width="8" height="8" fill="#000" stroke="none"/><rect x="8" y="8" width="8" height="8" fill="#000" stroke="none"/></pattern>
+</defs></svg>
+<div class="window">
+  <div class="titlebar" aria-hidden="true"><div class="closebox"></div><span>Haunted House</span></div>
+  <main>
+    <div class="art" id="art" role="img" aria-label="Scene illustration"></div>
+    <h1 id="title" tabindex="-1"></h1>
+    <!-- aria-live so screen readers announce each new scene -->
+    <div class="story" id="story" aria-live="polite"></div>
+    <ol id="choices" aria-label="Your choices"></ol>
+  </main>
+  <div class="toolbar">
+    <span>Tip: press a number key to choose.</span>
+    <button id="sound" aria-pressed="true">Sound: On</button>
+  </div>
+</div>
+
+<script>
+// v1.0 - initial build
+// v1.1 - story moved to top of script
+// v1.2 - Uninvited-style dithered perspective artwork
+// v1.3 - richer sounds: wooden door creak + latch click, echo, layered moan/growl/bats
+// v1.4 - door creak rebuilt with random stick-slip wobble
+// v1.5 - Entry Way picture: a door on each of the three visible walls
+// v1.6 - Entry Way choices: Bedroom left, Dining Room ahead, Parlor right
+// v1.7 - Back Yard celebration music; HAPPY HALLOWEEN in all caps
+// v1.8 - Bedroom: Attic door moved to the left wall
+// v1.9 - higher-quality artwork: finer dithering, graded lighting, planks, cobwebs, props
+// v2.0 - realistic close-mic hinge creak
+// v2.1 - creak shortened to 2 seconds and made smoother (less wobble)
+// v2.2 - creak rebuilt as a rattle of stick-slip ticks (no more cat yowl)
+// v2.3 - door sound removed entirely
+// v2.4 - added Back to Home link
+
+/* ==========================================================================
+   THE STORY - EDIT HERE!
+   Everything the player reads lives in this section: scene titles, the text,
+   and the choices (button labels and where each one leads).
+   - "to" is the id of the scene the button goes to.
+   - "snd" plays a sound when the button is pressed: squeak, moan, growl, celebrate.
+   - "onEnter" plays a sound when the scene appears (squeak, moan, growl, celebrate).
+   - "art" is the name of a picture in the PICTURES section further down.
+   - "end: true" marks an ending (shows THE END).
+   ========================================================================== */
+// Each scene has: title, art, text (a function so it can change with game state),
+// choices (label, destination, optional sound), and optional onEnter sound / end flag.
+const MONSTER = ['Eyes peer out of the darkness. You hear a low growl.', 'A monster appears! You flee in terror!'];
+const AGAIN = [{ label: 'Play again', to: 'front', reset: true }];
+
+const SCENES = {
+  front: {
+    title: 'In Front of the House', art: 'front',
+    text: () => ['A crooked old house looms before you. The windows are dark.'],
+    choices: [{ label: 'Go up the front steps and open the front door', to: 'entry' }]
+  },
+  entry: {
+    title: 'Entry Way', art: 'entry',
+    text: () => ['It is dark in here. The old wallpaper is peeling. There is a door on the left, one straight ahead, and one on the right, plus the front door behind you.'],
+    choices: [
+      { label: 'Open the Bedroom door on your left', to: 'bedroom' },
+      { label: 'Open the Dining Room door straight ahead', to: 'dining' },
+      { label: 'Open the Parlor door on your right', to: 'parlor' },
+      { label: 'Go back outside', to: 'front' }
+    ]
+  },
+  bedroom: {
+    title: 'Bedroom', art: 'bedroom',
+    text: () => ['A single bed sits against the wall. A door on the left wall leads to the attic, and a door straight ahead leads to a closet. The Entry Way is behind you.'],
+    choices: [
+      { label: 'Open the Attic door on your left', to: 'attic' },
+      { label: 'Open the Closet door straight ahead', to: 'closet' },
+      { label: 'Return to the Entry Way', to: 'entry' }
+    ]
+  },
+  attic: {
+    title: 'Attic', art: 'attic',
+    // Bats only show up the first time the door is opened (state.batsNow is set in go())
+    text: () => (state.batsNow ? ['The door opens and BATS fly out all around you!'] : [])
+      .concat(['Up here is lots of creepy old stuff. It is very dusty. There is nothing else to see.']),
+    choices: [{ label: 'Go back down to the Bedroom', to: 'bedroom' }]
+  },
+  closet: { title: 'Closet', art: 'closet', text: () => MONSTER, onEnter: 'growl', end: true, choices: AGAIN },
+  parlor: {
+    title: 'Parlor', art: 'parlor',
+    text: () => ['Old fashioned furniture fills the room. Over the fireplace hangs a portrait. Its eyes seem to follow you.'],
+    choices: [
+      { label: 'Approach the portrait', to: 'portrait' },
+      { label: 'Return to the Entry Way', to: 'entry' }
+    ]
+  },
+  portrait: {
+    title: 'The Portrait', art: 'portrait',
+    text: () => ['A ghostly face appears! You hear a long, ghostly moan.'],
+    onEnter: 'moan',
+    choices: [{ label: 'Back away to the Parlor', to: 'parlor' }]
+  },
+  dining: {
+    title: 'Dining Room', art: 'dining',
+    text: () => ['A large formal table and chairs fill the center of the room. A dingy chandelier hangs above. A door leads to the Kitchen.'],
+    choices: [
+      { label: 'Go through the door to the Kitchen', to: 'kitchen' },
+      { label: 'Return to the Entry Way', to: 'entry' }
+    ]
+  },
+  kitchen: {
+    title: 'Kitchen', art: 'kitchen',
+    text: () => ['An old fashioned kitchen with broken dishes everywhere. One door leads to the Back Yard and one leads down to the Basement.'],
+    choices: [
+      { label: 'Go out to the Back Yard', to: 'backyard' },
+      { label: 'Go down to the Basement', to: 'basement' },
+      { label: 'Return to the Dining Room', to: 'dining' }
+    ]
+  },
+  basement: {
+    title: 'Basement', art: 'basement',
+    text: () => ['You go down the stairs. It is dark and damp. Shelves are full of boxes and jars. There is a door to a Storage Room.'],
+    choices: [
+      { label: 'Open the Storage Room door', to: 'storage' },
+      { label: 'Climb back up to the Kitchen', to: 'kitchen' }
+    ]
+  },
+  storage: { title: 'Storage Room', art: 'storage', text: () => MONSTER, onEnter: 'growl', end: true, choices: AGAIN },
+  backyard: {
+    title: 'Back Yard', art: 'backyard',
+    text: () => ['You step out onto the back step. Before you is a beautiful pumpkin patch. The sun is setting.', 'HAPPY HALLOWEEN!'],
+    onEnter: 'celebrate',
+    end: true, choices: AGAIN
+  }
+};
+
+/* ---------- SOUND (all built from code - no audio files to load, so nothing can go missing) ---------- */
+let audioCtx = null;   // created on first click, because browsers require a user gesture
+let bus = null;        // (echo mixing board)
+let dry = null;        // a second output with no echo, for close-up "foley" sounds        // the shared "mixing board" every sound goes through (adds a little spooky echo)
+let soundOn = true;    // the player can mute with the toolbar button
+
+// Get (or create) the audio system, build the echo bus the first time, and wake it up if paused.
+function getAudio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  if (!audioCtx) {
+    audioCtx = new AC();
+    bus = audioCtx.createGain(); bus.gain.value = 0.9; bus.connect(audioCtx.destination);   // dry (direct) sound
+    const echo = audioCtx.createDelay(); echo.delayTime.value = 0.23;                       // a room-like echo...
+    const feedback = audioCtx.createGain(); feedback.gain.value = 0.35;                     // ...that repeats and fades
+    const damp = audioCtx.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = 1800;  // each repeat gets duller
+    const wet = audioCtx.createGain(); wet.gain.value = 0.3;
+    dry = audioCtx.createGain(); const comp = audioCtx.createDynamicsCompressor();   // close-mic path: direct sound, lightly compressed
+    dry.connect(comp); comp.connect(audioCtx.destination);
+    bus.connect(echo); echo.connect(damp); damp.connect(feedback); feedback.connect(echo); damp.connect(wet); wet.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// A smooth musical tone. "points" = [seconds, hz] pairs the pitch glides through.
+// lfoHz/lfoDepth wobble the pitch (vibrato or growl); "delay" starts it later.
+function synth(type, points, dur, vol, lowpass, lfoHz = 0, lfoDepth = 0, delay = 0) {
+  const c = getAudio(); if (!c || !soundOn) return;
+  const t = c.currentTime + delay;
+  const osc = c.createOscillator(), filt = c.createBiquadFilter(), gain = c.createGain();
+  osc.type = type;
+  points.forEach(([s, hz], i) => i ? osc.frequency.linearRampToValueAtTime(hz, t + s) : osc.frequency.setValueAtTime(hz, t));
+  filt.type = 'lowpass'; filt.frequency.value = lowpass;
+  gain.gain.setValueAtTime(0, t);                      // fade in quickly...
+  gain.gain.linearRampToValueAtTime(vol, t + dur * 0.15);
+  gain.gain.linearRampToValueAtTime(0, t + dur);       // ...then fade out
+  if (lfoHz) {
+    const lfo = c.createOscillator(), depth = c.createGain();
+    lfo.frequency.value = lfoHz; depth.gain.value = lfoDepth;
+    lfo.connect(depth); depth.connect(osc.frequency);
+    lfo.start(t); lfo.stop(t + dur);
+  }
+  osc.connect(filt); filt.connect(gain); gain.connect(bus);
+  osc.start(t); osc.stop(t + dur);
+}
+
+// A burst of filtered static (noise) that dies away quickly. Great for clicks, thumps, wind and wing flutter.
+// type = filter kind, freq = filter pitch (optionally sliding to freqEnd), q = how narrow the filter is.
+function noise(type, freq, q, dur, vol, delay = 0, freqEnd = null, out = null) {
+  const c = getAudio(); if (!c || !soundOn) return;
+  const t = c.currentTime + delay;
+  const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;   // random static
+  const src = c.createBufferSource(); src.buffer = buf;
+  const f = c.createBiquadFilter(); f.type = type; f.Q.value = q; f.frequency.setValueAtTime(freq, t);
+  if (freqEnd) f.frequency.linearRampToValueAtTime(freqEnd, t + dur);
+  const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  src.connect(f); f.connect(g); g.connect(out || bus); src.start(t);
+}
+
+// Named sound effects used by the story
+const SOUNDS = {
+  // Celebration music for the Back Yard: a gentle bell-like tune in a calm major key (C pentatonic),
+  // with soft chords underneath, about 7 seconds long. Each melody note is [pitch in hz, start time in seconds].
+  celebrate: () => {
+    const tune = [[659.25,0],[783.99,.6],[880,1.2],[783.99,1.8],[659.25,2.4],[587.33,3],[659.25,3.6],[783.99,4.2],[1046.5,4.8]];
+    tune.forEach(([hz, at], i) => {
+      const last = i === tune.length - 1;
+      synth('sine', [[0,hz],[1,hz]], last ? 2.4 : 1.4, .12, 3500, 0, 0, at);      // the main bell note
+      synth('sine', [[0,hz*2],[1,hz*2]], last ? 1.6 : .8, .03, 5000, 0, 0, at);    // a faint sparkly overtone
+    });
+    [[[261.63,329.63,392],0],[[220,261.63,329.63],2.4],[[174.61,220,261.63],3.6],[[261.63,329.63,392],4.8]].forEach(([chord, at], i) =>
+      chord.forEach(hz => synth('triangle', [[0,hz],[1,hz]], i === 3 ? 2.6 : 2.4, .05, 900, 0, 0, at)));  // soft pad chords
+  },
+  // Bats: wing-flutter static plus lots of tiny wobbly high squeaks at random moments
+  squeak: () => {
+    for (let i = 0; i < 12; i++) noise('bandpass', 1200, 1, .08, .1, i * .09);
+    for (let i = 0; i < 10; i++) synth('sine', [[0,3200 + Math.random()*800],[.08,4800]], .12, .08, 9000, 40, 300, Math.random() * 1.2);
+  },
+  // Ghostly moan: a small "choir" of detuned voices sliding down, with vibrato and a breathy whisper
+  moan: () => {
+    synth('sine', [[0,262],[1.4,196],[3,130]], 3.2, .14, 1000, 5, 10);
+    synth('sine', [[0,268],[1.4,200],[3,134]], 3.2, .12, 1000, 4.3, 12);
+    synth('triangle', [[0,131],[3,65]], 3.2, .12, 600, 3, 6);
+    noise('bandpass', 600, 3, 3, .1, 0, 300);
+  },
+  // Monster growl: rough low saw, even lower rumbling square wave, and a throaty rasp
+  growl: () => {
+    synth('sawtooth', [[0,70],[.5,55],[1.7,40]], 1.8, .25, 350, 30, 12);
+    synth('square', [[0,35],[1.8,28]], 1.8, .18, 150, 22, 6);
+    noise('lowpass', 400, 2, 1.6, .2);
+  }
+};
+
+/* ---------- PICTURES ----------
+   Drawn in the style of the 1986 Mac game "Uninvited": first-person room views, heavy black outlines,
+   and dithered (dotted) shading. The shading patterns (d25 light, d50 medium, d75 dark, hatch, tile)
+   are defined once near the top of the page in the hidden <svg> and reused here with fill="url(#name)". */
+const pic = inner => `<svg viewBox="0 0 300 165" aria-hidden="true"><g transform="scale(1.5)">${inner}</g></svg>`;
+// room(): a one-point-perspective room - back wall, floor, ceiling and two side walls
+const LIGHTER = { 'url(#d75)': 'url(#d50)', 'url(#d50)': 'url(#d25)', 'url(#d25)': 'url(#d12)', 'url(#hatch)': 'url(#d25)' };
+const room = (wall, floor, side, planks = true) => {
+  // side walls are cut into 3 strips that get lighter toward the back, like light fading into the room
+  const strip = (x0, x1, fill, flip) => { const f = x => flip ? 200 - x : x;
+    return `<polygon points="${f(x0)},${x0/2} ${f(x1)},${x1/2} ${f(x1)},${110-.6*x1} ${f(x0)},${110-.6*x0}" fill="${fill}"/>`; };
+  let out = '';
+  [false, true].forEach(fl => { out += strip(0, 22, side, fl) + strip(22, 38, side, fl) + strip(38, 50, LIGHTER[side] || side, fl); });
+  out += `<polygon points="0,0 200,0 150,25 50,25" fill="#fff"/><path d="M0 0L50 25M200 0L150 25M50 25h100" fill="none"/>`;           // ceiling + molding
+  out += `<polygon points="0,110 200,110 150,80 50,80" fill="${floor}"/>`;
+  if (LIGHTER[floor]) out += `<polygon points="50,80 150,80 160,86.5 40,86.5" fill="${LIGHTER[floor]}" stroke="none"/>`;                  // lighter floor at the back
+  if (planks) out += '<path d="M50 80L0 110M70 80L40 110M90 80L80 110M110 80L120 110M130 80L160 110M150 80L200 110" fill="none" stroke-width=".6"/>';
+  out += `<rect x="50" y="25" width="100" height="55" fill="${wall}"/><path d="M50 76h100M0 103L50 76M200 103L150 76" fill="none" stroke-width=".7"/>`;  // baseboards
+  return out;
+};
+// web(): a cobweb in a corner (sx/sy = +1 or -1 to flip which corner it hangs in)
+const web = (x, y, sx, sy) => `<path d="M${x} ${y}l${26*sx} ${9*sy}M${x} ${y}l${17*sx} ${18*sy}M${x} ${y}l${7*sx} ${26*sy}M${x+9*sx} ${y+3*sy}q-1 ${8*sy} ${-6*sx} ${9*sy}M${x+17*sx} ${y+6*sy}q-2 ${12*sy} ${-10*sx} ${13*sy}" fill="none" stroke-width=".5"/>`;
+// bat(): a small bat silhouette
+const bat = (x, y) => `<path d="M${x} ${y}q4-6 8-1q4-5 8 1q-4 1-8 4q-4-3-8-4z" fill="#000"/>`;
+// monster(): glowing eyes, horns, jagged teeth and claws coming out of the dark
+const monster = extra => pic(`<rect width="200" height="110" fill="#000" stroke="none"/>${extra}` +
+  `<polygon points="62,48 55,18 80,36" fill="#fff" stroke="#fff"/><polygon points="138,48 145,18 120,36" fill="#fff" stroke="#fff"/>` +
+  `<path d="M58 110Q50 50 100 32Q150 50 142 110Z" fill="url(#d25)" stroke="#fff"/>` +
+  `<ellipse cx="80" cy="60" rx="10" ry="6" fill="#fff"/><ellipse cx="120" cy="60" rx="10" ry="6" fill="#fff"/>` +
+  `<path d="M80 54v12M120 54v12" stroke="#000" stroke-width="3"/>` +
+  `<path d="M72 84L80 98L88 84L96 99L104 84L112 99L120 84L128 98" fill="#000" stroke="#fff"/>` +
+  `<path d="M20 110l8-22 5 22M36 110l5-18 4 18M155 110l5-18 4 18M170 110l8-22 5 22" fill="#fff" stroke="#fff"/>`);
+const ART = {
+  front: pic(`<path d="M20 8h1M60 18h1M120 6h1M92 26h1M150 40h1M12 40h1" stroke-width="2"/><circle cx="170" cy="20" r="9" fill="url(#d25)"/>` +
+    `<rect y="88" width="200" height="22" fill="url(#d50)"/>` +
+    `<path d="M20 100L22 58M22 76L8 62M22 68L36 54M22 62L18 46M22 72L34 70" fill="none" stroke-width="3"/>` +
+    `<rect x="62" y="48" width="88" height="42" fill="url(#d25)"/><polygon points="54,48 106,16 158,48" fill="url(#d75)"/>` +
+    `<rect x="132" y="18" width="10" height="22" fill="url(#d75)"/><rect x="72" y="58" width="14" height="16" fill="#000"/><rect x="126" y="58" width="14" height="16" fill="#000"/>` +
+    `<path d="M79 58v16M72 66h14M133 58v16M126 66h14" stroke="#fff"/><circle cx="106" cy="38" r="5" fill="#000"/>` +
+    `<rect x="97" y="62" width="18" height="28" fill="#000"/><rect x="90" y="54" width="32" height="6" fill="url(#d75)"/><path d="M92 60v30M120 60v30"/>` +
+    `<rect x="92" y="90" width="28" height="3" fill="#fff"/><rect x="88" y="93" width="36" height="3" fill="#fff"/><rect x="84" y="96" width="44" height="3" fill="#fff"/>` +
+    `<path d="M160 94h40M164 84v14M174 84v14M184 84v14M194 84v14" />`),
+  // Entry Way: one door on the left wall, one on the back wall, one on the right wall (side doors are drawn in perspective)
+  entry: pic(room('url(#hatch)', 'url(#d50)', 'url(#d75)') +
+    `<path d="M50 66h100"/>` +
+    `<polygon points="14,101.6 14,35.6 38,39.6 38,87.2" fill="#000"/><polygon points="186,101.6 186,35.6 162,39.6 162,87.2" fill="#000"/>` +
+    `<rect x="90" y="38" width="20" height="42" fill="#000"/><path d="M90 38q10-10 20 0" fill="none"/>` +
+    `<path d="M19 82V52L33 54V80M181 82V52L167 54V80" fill="none" stroke="#fff" stroke-width="1"/>` +
+    `<circle cx="34" cy="68" r="1.5" fill="#fff"/><circle cx="166" cy="68" r="1.5" fill="#fff"/><circle cx="107" cy="60" r="1.5" fill="#fff"/>` +
+    `<polygon points="80,110 120,110 108,82 92,82" fill="url(#d75)"/><path d="M66 30v8M134 30v8M62 38h8M130 38h8"/><circle cx="66" cy="27" r="3" fill="#fff"/><circle cx="134" cy="27" r="3" fill="#fff"/>`),
+  bedroom: pic(room('#fff', 'url(#d25)', 'url(#d50)') +
+    `<rect x="88" y="32" width="24" height="26" fill="#000"/><path d="M100 32v26M88 45h24" stroke="#fff"/><circle cx="106" cy="38" r="3" fill="#fff"/>` +
+    `<path d="M84 30q4 14 0 30M116 30q-4 14 0 30" fill="url(#d50)"/><polygon points="14,101.6 14,35.6 38,39.6 38,87.2" fill="#000"/><path d="M19 82V52L33 54V80" fill="none" stroke="#fff" stroke-width="1"/><circle cx="34" cy="68" r="1.5" fill="#fff"/><rect x="128" y="40" width="16" height="40" fill="#000"/><circle cx="141" cy="62" r="1.5" fill="#fff"/>` +
+    `<rect x="76" y="54" width="48" height="10" fill="url(#d75)"/><polygon points="72,100 128,100 122,64 78,64" fill="url(#d50)"/><rect x="84" y="62" width="32" height="9" fill="#fff"/>` +
+    `<rect x="70" y="100" width="60" height="8" fill="url(#d75)"/><rect x="146" y="84" width="14" height="18"/><path d="M153 84v-8"/><circle cx="153" cy="74" r="2" fill="#fff"/>`),
+  attic: pic(room('url(#d25)', 'url(#d50)', 'url(#hatch)') +
+    `<path d="M0 0L100 10L200 0M50 25L100 10L150 25M100 10V25M25 12V50M175 12V50"/><circle cx="100" cy="42" r="9" fill="#000"/><path d="M91 42h18M100 33v18" stroke="#fff"/>` +
+    `<rect x="58" y="66" width="34" height="18" fill="url(#d75)"/><path d="M58 72h34M75 72v6"/><path d="M122 84V62M114 84h16"/><ellipse cx="122" cy="56" rx="7" ry="9" fill="url(#d50)"/>` +
+    `<path d="M0 26Q8 10 24 0M0 44Q14 20 44 0M0 0L30 26M0 0L16 36" fill="none" stroke-width="1"/><path d="M30 92h1M160 70h1M140 100h1M70 98h1M180 90h1" stroke-width="2"/>`),
+  closet: monster(`<path d="M10 5v105M190 5v105M10 5h180" fill="none" stroke="#fff" stroke-width="3"/><path d="M30 5v14l-10 6M170 5v14l10 6" fill="none" stroke="#fff"/>`),
+  parlor: pic(room('url(#hatch)', 'url(#d25)', 'url(#d50)') +
+    `<rect x="78" y="58" width="44" height="22" fill="url(#d50)"/><rect x="86" y="64" width="28" height="16" fill="#000"/><rect x="74" y="54" width="52" height="5" fill="#fff"/>` +
+    `<rect x="82" y="28" width="36" height="24" stroke-width="3"/><ellipse cx="100" cy="40" rx="8" ry="10" fill="url(#d25)"/><ellipse cx="96" cy="38" rx="2.5" ry="1.8" fill="#000"/><ellipse cx="104" cy="38" rx="2.5" ry="1.8" fill="#000"/><path d="M97 46h6"/>` +
+    `<path d="M14 80q0-14 14-14h14v22H14zM14 80v20h34V88" fill="url(#d75)"/><rect x="156" y="70" width="26" height="30" fill="url(#d50)"/><rect x="152" y="62" width="8" height="38" fill="url(#d75)"/>` +
+    `<path d="M130 92v-14M126 78h8M130 78v-6" /><circle cx="130" cy="70" r="2" fill="#fff"/><polygon points="70,110 130,110 120,92 80,92" fill="url(#d75)"/>`),
+  portrait: pic(`<rect width="200" height="110" fill="#000" stroke="none"/><rect x="40" y="4" width="120" height="102" fill="url(#d50)" stroke="#fff" stroke-width="3"/>` +
+    `<rect x="50" y="12" width="100" height="86" fill="#000" stroke="#fff"/><path d="M60 98Q58 30 100 18Q142 30 140 98" fill="url(#d25)" stroke="#fff"/>` +
+    `<ellipse cx="100" cy="56" rx="26" ry="34" fill="#fff"/><path d="M76 50Q100 40 124 50" fill="url(#d50)" stroke="none"/>` +
+    `<ellipse cx="89" cy="52" rx="7" ry="9" fill="#000"/><ellipse cx="111" cy="52" rx="7" ry="9" fill="#000"/><circle cx="89" cy="54" r="2" fill="#fff" stroke="none"/><circle cx="111" cy="54" r="2" fill="#fff" stroke="none"/>` +
+    `<path d="M100 60l-3 10h6z" fill="#000"/><ellipse cx="100" cy="82" rx="8" ry="11" fill="#000"/><path d="M64 98q8-14 16 0t16 0 16 0 16 0" fill="none" stroke="#fff"/>`),
+  dining: pic(room('url(#hatch)', 'url(#d25)', 'url(#d50)') +
+    `<path d="M100 0v14"/><path d="M78 24q22 14 44 0M80 24v-6M90 26v-8M100 28v-9M110 26v-8M120 24v-6M100 14l-18 10M100 14l18 10" fill="none"/><path d="M80 17v-3M90 17v-3M100 18v-3M110 17v-3M120 17v-3" stroke-width="2"/>` +
+    `<rect x="120" y="40" width="22" height="40" fill="#000"/><circle cx="124" cy="62" r="1.5" fill="#fff"/><rect x="62" y="36" width="24" height="26" fill="#000"/><path d="M74 36v26M62 49h24" stroke="#fff"/>` +
+    `<polygon points="52,102 148,102 126,70 74,70" fill="url(#d50)"/><path d="M58 102v8M142 102v8M80 70v6M120 70v6"/>` +
+    `<rect x="24" y="64" width="9" height="30" fill="url(#d75)"/><rect x="24" y="84" width="22" height="6" fill="#fff"/><rect x="167" y="64" width="9" height="30" fill="url(#d75)"/><rect x="154" y="84" width="22" height="6" fill="#fff"/>`),
+  kitchen: pic(room('#fff', 'url(#tile)', 'url(#d50)') +
+    `<rect x="56" y="48" width="30" height="32" fill="#000"/><rect x="60" y="54" width="22" height="12" fill="#fff"/><rect x="56" y="42" width="30" height="6" fill="url(#d75)"/>` +
+    `<path d="M96 24v12M108 24v16M120 24v10"/><circle cx="96" cy="40" r="5" fill="#000"/><circle cx="108" cy="44" r="6" fill="#000"/><ellipse cx="120" cy="37" rx="5" ry="4" fill="#000"/>` +
+    `<rect x="96" y="62" width="48" height="18" fill="url(#d50)"/><path d="M104 62l6-5 4 5 6-6 3 6M126 62l4-3 5 3" fill="#fff"/>` +
+    `<rect x="132" y="30" width="14" height="30" fill="#000"/><rect x="12" y="50" width="24" height="46" fill="#000"/><path d="M12 96l24-10M12 90l24-10" stroke="#fff"/>`),
+  basement: pic(room('url(#d50)', 'url(#d75)', 'url(#d75)') +
+    `<path d="M50 40h100M50 56h100M50 72h100"/><path d="M60 40v-8h8v8M64 56v-8h8v8"/>` +
+    `<ellipse cx="62" cy="36" rx="5" ry="4" fill="#fff"/><rect x="58" y="30" width="8" height="4" fill="#fff"/><rect x="84" y="46" width="12" height="10" fill="#fff"/><rect x="104" y="44" width="16" height="12" fill="#fff"/>` +
+    `<ellipse cx="132" cy="50" rx="5" ry="6" fill="#fff"/><rect x="72" y="62" width="14" height="10" fill="#fff"/><rect x="112" y="60" width="18" height="12" fill="#fff"/><ellipse cx="92" cy="66" rx="4" ry="5" fill="#fff"/>` +
+    `<path d="M100 0v10"/><circle cx="100" cy="14" r="4" fill="#fff"/><polygon points="0,20 40,40 40,46 0,26" fill="#fff"/><path d="M0 40l34 20M0 56l30 18M0 72l26 16" />` +
+    `<rect x="160" y="42" width="30" height="50" fill="#000"/>`),
+  storage: monster(`<path d="M0 30h30M0 60h30M170 30h30M170 60h30" stroke="#fff"/><rect x="4" y="14" width="14" height="14" fill="url(#d50)" stroke="#fff"/><rect x="182" y="44" width="14" height="14" fill="url(#d50)" stroke="#fff"/>`),
+  backyard: pic(`<rect width="200" height="30" fill="url(#d25)" stroke="none"/><rect y="30" width="200" height="20" fill="url(#d50)" stroke="none"/><rect y="50" width="200" height="10" fill="url(#d75)" stroke="none"/>` +
+    `<path d="M100 20L100 6M70 28L60 14M130 28L140 14M46 40L30 34M154 40L170 34" stroke-width="1.5"/><circle cx="100" cy="60" r="26" fill="#fff"/><path d="M76 54h48M74 60h52M76 66h48" stroke-width="1"/>` +
+    `<rect y="60" width="200" height="50" fill="url(#d75)" stroke="none"/><path d="M0 60h200"/>` +
+    `<path d="M10 60l8-28 6 28M170 60l8-24 8 24M28 60l4-14 4 14" fill="#000"/><path d="M0 70h200" stroke="#fff" stroke-width="1"/>` +
+    `<ellipse cx="40" cy="84" rx="20" ry="14" fill="#fff"/><path d="M30 71q-6 13 0 26M40 70v28M50 71q6 13 0 26M40 70v-6" fill="none"/>` +
+    `<ellipse cx="110" cy="76" rx="12" ry="8" fill="#fff"/><path d="M104 69q-3 8 0 14M110 68v16M116 69q3 8 0 14" fill="none"/>` +
+    `<ellipse cx="160" cy="92" rx="26" ry="16" fill="#fff"/><path d="M146 78q-8 14 0 28M160 76v32M174 78q8 14 0 28M160 76v-8" fill="none"/>` +
+    `<ellipse cx="85" cy="100" rx="14" ry="9" fill="#fff"/><path d="M79 92q-3 9 0 17M85 91v18M91 92q3 9 0 17" fill="none"/>`)
+};
+
+
+// Extra details drawn on top of each picture (cobwebs, props, bats...). Edit or add lines here to tweak a scene.
+const EXTRA = {
+  front: bat(24, 18) + bat(52, 30) + bat(170, 40) + `<path d="M70 44L106 22M142 44L106 22M78 44L106 29M134 44L106 29M86 44L106 36M126 44L106 36" stroke="#fff" stroke-width=".6"/><ellipse cx="76" cy="91" rx="5" ry="4" fill="#fff"/><path d="M76 87v-3M72 91q4 4 8 0" fill="none"/><path d="M0 100h200" stroke-width=".5"/><path d="M10 96l2-4 2 4M30 98l2-5 2 5M120 100l2-5 2 5M185 99l2-4 2 4" fill="none"/><rect x="72" y="58" width="14" height="16" fill="url(#d25)"/><path d="M79 58v16M72 66h14" stroke="#fff"/>`,
+  entry: web(50, 25, 1, 1) + web(150, 25, -1, 1) + `<rect x="60" y="34" width="14" height="19" fill="url(#d25)" stroke-width="1.5"/><rect x="127" y="34" width="14" height="19" fill="url(#d25)" stroke-width="1.5"/><ellipse cx="67" cy="43" rx="3" ry="4" fill="#fff"/><ellipse cx="134" cy="43" rx="3" ry="4" fill="#fff"/><path d="M100 0v8M96 8h8M97 8l3 6 3-6" fill="none"/><path d="M3 108l8-6M197 108l-8-6" stroke="#fff" stroke-width=".6"/>`,
+  bedroom: web(0, 0, 1, 1) + `<ellipse cx="100" cy="97" rx="48" ry="9" fill="url(#d12)" stroke-width=".7"/><path d="M82 70l-3 28M92 70l-1 30M108 70l1 30M118 70l3 28" stroke="#000" stroke-width=".5"/><path d="M76 82h48M78 90h44" stroke-width=".5"/><rect x="60" y="30" width="14" height="18" fill="url(#d25)" stroke-width="1.5"/><ellipse cx="67" cy="39" rx="3" ry="4" fill="#fff"/><path d="M156 98h10M158 102h8" stroke-width=".6"/>`,
+  attic: web(0, 0, 1, 1) + web(200, 0, -1, 1) + web(56, 26, 1, 1) + `<rect x="150" y="68" width="22" height="16" fill="url(#d50)"/><rect x="156" y="56" width="16" height="12" fill="url(#d25)"/><path d="M150 76h22" stroke="#fff"/><path d="M96 98q4-8 12 0" fill="none"/><path d="M100 10V0M94 0h12" /><path d="M20 80l14 4M170 84l12-5" stroke-width=".6"/>`,
+  closet: `<path d="M24 30l30 40M32 26l30 42M16 40l24 30" stroke="#fff" stroke-width=".8" fill="none"/>`,
+  parlor: web(150, 25, -1, 1) + `<path d="M40 40v8M160 40v8" /><circle cx="40" cy="36" r="3" fill="#fff"/><circle cx="160" cy="36" r="3" fill="#fff"/><rect x="92" y="75" width="16" height="3" fill="#fff"/><path d="M96 75v-6M104 75v-6M94 69h4M102 69h4" /><path d="M76 98h48M80 102h40" stroke-width=".6"/><path d="M22 66h20M18 72h26" stroke="#fff" stroke-width=".6"/>`,
+  portrait: `<path d="M20 20q10 10 0 20M180 30q-10 10 0 20M26 60q8 8 0 18M174 70q-8 8 0 18" fill="none" stroke="#fff" stroke-width=".8"/><path d="M92 34l4 6M108 34l-4 6" stroke="#000" stroke-width=".6"/>`,
+  dining: web(50, 25, 1, 1) + `<circle cx="84" cy="80" r="3" fill="#fff"/><circle cx="116" cy="80" r="3" fill="#fff"/><circle cx="100" cy="76" r="3" fill="#fff"/><path d="M100 70v-6M96 64h8" /><rect x="60" y="34" width="0" height="0"/><path d="M92 90q8 4 16 0" fill="none" stroke-width=".6"/><path d="M62 42h24M62 56h24" stroke-width=".6"/>`,
+  kitchen: web(150, 25, -1, 1) + `<path d="M60 90l6-4 4 5 5-6M110 96l7-3 3 5" fill="#fff"/><ellipse cx="90" cy="92" rx="6" ry="2" fill="#fff"/><path d="M100 24h24M100 28l3 6M110 28l3 8M120 28l-3 7" fill="none" stroke-width=".7"/><path d="M148 54l-4 12M148 60l-3 10" stroke-width=".6"/>`,
+  basement: web(0, 0, 1, 1) + web(200, 0, -1, 1) + `<path d="M120 25v12M120 40v3M150 30v8" stroke-width=".7"/><ellipse cx="120" cy="45" rx="2" ry="1.5" fill="#fff"/><rect x="26" y="88" width="20" height="20" fill="url(#d25)"/><path d="M26 94h20M26 102h20" /><path d="M60 100h30M70 104h20" stroke="#fff" stroke-width=".6"/>`,
+  storage: `<path d="M60 20q-6 20 0 40M140 20q6 20 0 40M88 100v8M112 100v8" stroke="#fff" stroke-width=".7" fill="none"/>`,
+  backyard: bat(20, 10) + bat(60, 22) + bat(150, 12) + `<path d="M0 108h200M10 100l4-8 4 8M60 104l4-8 4 8M130 106l4-8 4 8" stroke-width=".6" fill="none"/><path d="M0 62h200M6 56v10M26 56v10M46 56v10M66 56v10M86 56v10" stroke="#fff" stroke-width=".6"/><path d="M100 64l-4 3M100 64l4 3" stroke="#fff"/>`
+};
+Object.keys(EXTRA).forEach(k => { ART[k] = ART[k].replace('</g></svg>', EXTRA[k] + '</g></svg>'); });
+
+/* ---------- GAME LOGIC ---------- */
+// state remembers whether the bats have already flown out (and whether they are flying right now)
+let state = { current: 'front', batsSeen: false, batsNow: false };
+let currentChoices = [];  // the choices on screen, used by the number-key shortcuts
+
+// Move to a scene: update state, play sounds, then draw it.
+function go(id, snd, reset) {
+  if (reset) state = { current: 'front', batsSeen: false, batsNow: false };  // Play again wipes everything
+  state.batsNow = false;
+  if (id === 'attic' && !state.batsSeen) {      // first time only: bats!
+    state.batsSeen = true; state.batsNow = true;
+    SOUNDS.squeak();
+  }
+  if (snd) SOUNDS[snd]();
+  state.current = id;
+  const scene = SCENES[id];
+  if (scene.onEnter) SOUNDS[scene.onEnter]();
+  render(scene);
+}
+
+// Draw the current scene: picture, title, story text, and one button per choice.
+function render(scene) {
+  document.getElementById('art').innerHTML = ART[scene.art];
+  document.getElementById('art').setAttribute('aria-label', 'Illustration: ' + scene.title);
+  const title = document.getElementById('title');
+  title.textContent = scene.title;
+  const story = document.getElementById('story');
+  story.innerHTML = '';
+  scene.text().forEach(line => { const p = document.createElement('p'); p.textContent = line; story.appendChild(p); });
+  if (scene.end) { const e = document.createElement('div'); e.className = 'end'; e.textContent = 'THE END'; story.appendChild(e); }
+  const list = document.getElementById('choices');
+  list.innerHTML = '';
+  currentChoices = scene.choices;
+  scene.choices.forEach((c, i) => {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.textContent = (i + 1) + '. ' + c.label;
+    b.addEventListener('click', () => go(c.to, c.snd, c.reset));
+    li.appendChild(b); list.appendChild(li);
+  });
+  title.focus({ preventScroll: false });   // move keyboard/screen reader focus to the new scene
+}
+
+// Number keys 1-9 pick the matching choice.
+document.addEventListener('keydown', e => {
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= currentChoices.length && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const c = currentChoices[n - 1]; go(c.to, c.snd, c.reset);
+  }
+});
+
+// Sound on/off button
+const soundBtn = document.getElementById('sound');
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  soundBtn.textContent = 'Sound: ' + (soundOn ? 'On' : 'Off');
+  soundBtn.setAttribute('aria-pressed', String(soundOn));
+});
+
+// Start the game
+render(SCENES.front);
+</script>
+</body>
+</html>
