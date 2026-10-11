@@ -280,6 +280,7 @@
 
   <script>
     // v1.3 - added a plain list under the slider showing every caption at once
+    // v1.5 - dot list items marked role="presentation" so the tablist's only children are tabs
 
     // ============================================================
     // PHOTO LIST — the only thing you need to edit to change photos.
@@ -325,6 +326,9 @@
     // Each dot is a real button with its own label, and aria-current marks the active one.
     for (var i = 0; i < TOTAL_CARDS; i++) {
       var dot = document.createElement('li');
+      // v1.5 - the <li> is just a wrapper; role="presentation" hides it from screen
+      // readers so the tablist's children are the tab buttons themselves
+      dot.setAttribute('role', 'presentation');
       var dotBtn = document.createElement('button');
       dotBtn.className = 'dot';
       dotBtn.type = 'button';
