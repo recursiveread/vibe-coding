@@ -27,6 +27,12 @@
     height: 100%;
   }
 
+  /* v1.7 - when Tab scrolls a control into view, stop below the fixed
+     "Back to home" button so the focused control is never hidden behind it */
+  html {
+    scroll-padding-top: 4.5rem;
+  }
+
   body {
     margin: 0;
     min-height: 100vh;
@@ -260,6 +266,9 @@
 </style>
 </head>
 <body>
+  <!-- v1.7 - moved to the top of the page so Tab reaches it first, matching where it
+       appears on screen (it's fixed in the top-left, so its position looks the same) -->
+  <a class="home-link" href="../">← Back to home</a>
 
   <!--
     Structure notes for screen reader / keyboard users:
@@ -472,7 +481,6 @@
     // ---- Paint the very first slide on page load ----
     renderSlide();
   </script>
-  <a class="home-link" href="../">← Back to home</a>
 
 <style>
   /* Small, fixed link in the top-left corner so it's always easy to find */
