@@ -46,7 +46,8 @@
     justify-content: flex-start;
     background: var(--bg);
     color: var(--ink);
-    font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    /* v1.10 - clean sans-serif (each device's own built-in UI font) for easier reading */
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     /* Extra top padding leaves room for the fixed "Back to home" link */
     padding: 4.5rem 1rem 2rem;
   }
@@ -198,8 +199,11 @@
     background: rgba(242, 237, 230, 0.3);
   }
 
+  /* v1.8 - the current dot is also bigger, so it stands out even without seeing color */
   .dot[aria-current="true"]::before {
     background: var(--accent);
+    width: 13px;
+    height: 13px;
   }
 
   /* ---------- Caption list (shows every caption at once) ---------- */
@@ -229,8 +233,17 @@
     color: var(--ink);
   }
 
+  /* v1.8 - the current caption is also bold, so it stands out even without seeing color */
   .caption-list li[aria-current="true"] {
     color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* v1.9 - plus an arrow in front of the current caption, an obvious cue that
+     doesn't rely on color (the "/ ''" part stops screen readers reading the arrow aloud) */
+  .caption-list li[aria-current="true"]::before {
+    content: "\25B6\00A0";
+    content: "\25B6\00A0" / "";
   }
 
   /* ---------- Small screens (phones) ---------- */
