@@ -52,6 +52,15 @@
     }
   }
 
+  /* v1.6 - main wrapper: same centered column layout the body gave the two
+     sections, so adding it changes nothing on screen */
+  .page-main {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
   /* ---------- Slider shell ---------- */
   .slider {
     width: 100%;
@@ -262,6 +271,8 @@
     - Prev/Next are real <button> elements, so they are keyboard-focusable
       and activate with both Enter and Space automatically.
   -->
+  <!-- v1.6 - <main> marks the page's main content so screen reader users can jump straight to it -->
+  <main class="page-main">
   <section class="slider" aria-label="Photo slider">
     <h1 class="slider__heading">Photo Gallery</h1>
 
@@ -288,6 +299,7 @@
     <h2 class="caption-list__heading">All captions</h2>
     <ol class="caption-list" id="captionList"></ol>
   </section>
+  </main>
 
   <!-- Visually hidden but screen-reader announced status of the current slide -->
   <div id="liveStatus" aria-live="polite" style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;"></div>
