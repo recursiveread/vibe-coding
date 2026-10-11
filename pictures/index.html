@@ -153,23 +153,37 @@
   /* ---------- Position dots ---------- */
   .slider__dots {
     display: flex;
-    gap: 0.5rem;
+    gap: 0; /* v1.5 - the 24px buttons already space the dots apart */
     list-style: none;
     margin: 0;
     padding: 0;
   }
 
+  /* v1.5 - each dot button is now a 24x24px invisible tap area (easier to hit
+     on a phone); the small visible dot is drawn in its center by ::before */
   .dot {
-    width: 9px;
-    height: 9px;
+    position: relative;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     border: none;
     padding: 0;
-    background: rgba(242, 237, 230, 0.3);
+    background: transparent;
     cursor: pointer;
   }
 
-  .dot[aria-current="true"] {
+  .dot::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(242, 237, 230, 0.3);
+  }
+
+  .dot[aria-current="true"]::before {
     background: var(--accent);
   }
 
