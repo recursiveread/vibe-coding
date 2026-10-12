@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<!--
+  Pot-luck Thanksgiving Sign-Up
+  v1.0 - initial build: form, required-field validation, error summary with aria-live,
+         shareable answer link with Copy button, refill form from link
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pot-luck Thanksgiving Sign-Up</title>
+  <style>
+    /* v1.0 - Colors are stored as variables so light and dark mode can swap them in one place */
+    :root {
+      --bg: #fbf5ec;
+      --card: #ffffff;
+      --text: #2e2118;
+      --muted: #6b5546;
+      --accent: #a8461b;        /* pumpkin / rust */
+      --accent-dark: #7f3211;
+      --border: #cdb9a5;
+      --error: #b00020;
+      --error-bg: #fdecec;
+      --success-bg: #eef6e8;
+      --success-border: #5d8a3a;
+      --focus: #1a5fb4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1e1814;
+        --card: #2a221c;
+        --text: #f3e9df;
+        --muted: #c7b4a3;
+        --accent: #e07a45;
+        --accent-dark: #f09a6a;
+        --border: #5c4a3d;
+        --error: #ff8a8a;
+        --error-bg: #3a1f1f;
+        --success-bg: #22301b;
+        --success-border: #8fbf6a;
+        --focus: #8ab4ff;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 1.05rem;
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 44rem;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--accent);
+      font-size: clamp(1.7rem, 5vw, 2.4rem);
+      margin: 0.5rem 0 0.25rem;
+      line-height: 1.2;
+    }
+
+    .intro { color: var(--muted); margin-top: 0; }
+
+    form, .result {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-top: 1.25rem;
+    }
+
+    /* Each field gets breathing room */
+    .field { margin-bottom: 1.25rem; }
+
+    label, legend {
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+
+    .required-note { font-weight: 400; color: var(--error); }
+    .star { color: var(--error); font-weight: 700; }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="url"],
+    textarea {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      font: inherit;
+      color: var(--text);
+      background: var(--bg);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+    }
+    textarea { min-height: 6rem; resize: vertical; }
+
+    /* Fields with a problem get a red border (color is not the only signal — text is shown too) */
+    [aria-invalid="true"] { border-color: var(--error) !important; }
+
+    .hint { color: var(--muted); font-size: 0.92rem; margin: 0.2rem 0 0.4rem; }
+
+    .error-text {
+      color: var(--error);
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin: 0.35rem 0 0;
+    }
+    .error-text:empty { display: none; }
+
+    fieldset {
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem 1rem;
+      margin: 0 0 1.25rem;
+    }
+    legend { padding: 0 0.35rem; }
+
+    /* Radio and checkbox rows: big tap targets for phones */
+    .choice {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.35rem 0;
+      min-height: 2.5rem;
+    }
+    .choice label { font-weight: 400; margin: 0; cursor: pointer; }
+    .choice input { width: 1.25rem; height: 1.25rem; accent-color: var(--accent); margin: 0; flex-shrink: 0; }
+
+    /* Checkboxes flow into 1, 2 or 3 columns depending on screen width */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+      column-gap: 1rem;
+    }
+
+    button {
+      font: inherit;
+      font-weight: 700;
+      padding: 0.7rem 1.4rem;
+      border-radius: 8px;
+      border: 2px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      min-height: 2.75rem;
+    }
+    button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+    button.secondary { background: transparent; color: var(--accent); }
+    button.secondary:hover { background: var(--accent); color: #fff; }
+
+    /* A strong, obvious focus ring for keyboard users */
+    :focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    /* Error summary box at the top of the form */
+    .error-summary {
+      border: 2px solid var(--error);
+      background: var(--error-bg);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .error-summary h2 { margin: 0 0 0.4rem; font-size: 1.1rem; color: var(--error); }
+    .error-summary ul { margin: 0; padding-left: 1.25rem; }
+    .error-summary a { color: var(--error); font-weight: 600; }
+    .error-summary[hidden] { display: none; }
+
+    /* Result box showing the shareable link */
+    .result {
+      border: 2px solid var(--success-border);
+      background: var(--success-bg);
+    }
+    .result h2 { margin-top: 0; font-size: 1.25rem; }
+    .copy-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+    .copy-row input { flex: 1 1 16rem; }
+    .status { margin: 0.5rem 0 0; font-weight: 600; min-height: 1.5em; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+    /* Text only screen readers can hear */
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pot-luck Thanksgiving Sign-Up</h1>
+    <p class="intro">Let us know if you're coming and what you can bring. Fields marked with a <span class="star" aria-hidden="true">*</span> are required.</p>
+
+    <!-- novalidate turns off the browser's pop-up bubbles so we can show our own clear, announced errors -->
+    <form id="signup" novalidate>
+
+      <!-- Error summary: hidden until a submit fails. aria-live makes screen readers read it when it changes. -->
+      <div id="error-summary" class="error-summary" aria-live="assertive" aria-atomic="true" hidden>
+        <h2 id="error-summary-title">There is a problem</h2>
+        <ul id="error-list"></ul>
+      </div>
+
+      <div class="field">
+        <label for="name">
+          Name <span class="star" aria-hidden="true">*</span>
+          <span class="required-note">(required)</span>
+        </label>
+        <input type="text" id="name" name="name" autocomplete="name"
+               required aria-required="true" aria-describedby="name-error">
+        <p id="name-error" class="error-text"></p>
+      </div>
+
+      <div class="field">
+        <label for="email">
+          Email <span class="star" aria-hidden="true">*</span>
+          <span class="required-note">(required)</span>
+        </label>
+        <p id="email-hint" class="hint">For example: julia@example.com</p>
+        <input type="email" id="email" name="email" autocomplete="email" inputmode="email"
+               required aria-required="true" aria-describedby="email-hint email-error">
+        <p id="email-error" class="error-text"></p>
+      </div>
+
+      <!-- v1.1 - attendance is now required; the fieldset carries the error state and message -->
+      <fieldset id="attending-group" aria-describedby="attending-error">
+        <legend>
+          Will you be attending? <span class="star" aria-hidden="true">*</span>
+          <span class="required-note">(required)</span>
+        </legend>
+        <div class="choice">
+          <input type="radio" id="attending-yes" name="attending" value="yes" required>
+          <label for="attending-yes">Yes, I'll be there</label>
+        </div>
+        <div class="choice">
+          <input type="radio" id="attending-no" name="attending" value="no" required>
+          <label for="attending-no">No, I can't make it</label>
+        </div>
+        <p id="attending-error" class="error-text"></p>
+      </fieldset>
+
+      <fieldset>
+        <legend>What can you bring? <span class="hint">(choose any)</span></legend>
+        <!-- The checkboxes are generated by JavaScript from one list, so adding a dish is a one-line change -->
+        <div class="grid" id="dish-list"></div>
+      </fieldset>
+
+      <div class="field">
+        <label for="notes">Notes</label>
+        <p id="notes-hint" class="hint">Allergies, plus-ones, what your "other" dish is, etc.</p>
+        <textarea id="notes" name="notes" aria-describedby="notes-hint"></textarea>
+      </div>
+
+      <div class="actions">
+        <button type="submit">Sign me up</button>
+        <button type="button" class="secondary" id="clear-btn">Clear form</button>
+      </div>
+    </form>
+
+    <!-- Result section: hidden until the form is valid -->
+    <section id="result" class="result" hidden aria-labelledby="result-title">
+      <h2 id="result-title" tabindex="-1">You're signed up! Here's your link</h2>
+      <p>This link holds your answers. Send it to the host, or keep it to come back and edit later.</p>
+      <label for="share-link">Your answers link</label>
+      <div class="copy-row">
+        <input type="url" id="share-link" readonly>
+        <button type="button" id="copy-btn">Copy link</button>
+      </div>
+      <!-- Polite live region so "Copied!" is announced without interrupting -->
+      <p id="copy-status" class="status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script>
+    // v1.0 - initial build
+    // v1.1 - attending/not attending radio group is now required
+
+    /* ------------------------------------------------------------------
+       THE DISH LIST
+       This is the one place that lists every "thing you can bring".
+       Each entry has a short code (used in the link) and a label (shown on screen).
+       ------------------------------------------------------------------ */
+    const DISHES = [
+      { id: 'stuffing',    label: 'Stuffing' },
+      { id: 'mashed',      label: 'Mashed potatoes' },
+      { id: 'gravy',       label: 'Gravy' },
+      { id: 'vegetable',   label: 'Vegetable' },
+      { id: 'salad',       label: 'Salad' },
+      { id: 'cranberry',   label: 'Cranberry sauce' },
+      { id: 'rolls',       label: 'Dinner rolls' },
+      { id: 'otherside',   label: 'Other side dish' },
+      { id: 'beverages',   label: 'Beverages' },
+      { id: 'pie',         label: 'Pie' },
+      { id: 'otherdessert',label: 'Other dessert' }
+    ];
+
+    /* Grab the page elements we'll work with, so we don't have to look them up repeatedly */
+    const form         = document.getElementById('signup');
+    const dishList     = document.getElementById('dish-list');
+    const nameInput    = document.getElementById('name');
+    const emailInput   = document.getElementById('email');
+    const notesInput   = document.getElementById('notes');
+    const summary      = document.getElementById('error-summary');
+    const errorList    = document.getElementById('error-list');
+    const resultBox    = document.getElementById('result');
+    const resultTitle  = document.getElementById('result-title');
+    const shareLink    = document.getElementById('share-link');
+    const copyBtn      = document.getElementById('copy-btn');
+    const copyStatus   = document.getElementById('copy-status');
+    const clearBtn     = document.getElementById('clear-btn');
+    const attendGroup  = document.getElementById('attending-group');
+    const attendYes    = document.getElementById('attending-yes');
+
+    /* ------------------------------------------------------------------
+       REQUIRED FIELDS (v1.1)
+       Each required item has a short key. Its error message lives in the
+       element with id "<key>-error". "markEl" is what gets the red border
+       and aria-invalid: the input itself, or the whole fieldset for radios.
+       ------------------------------------------------------------------ */
+    const REQUIRED = {
+      name:      { markEl: nameInput },
+      email:     { markEl: emailInput },
+      attending: { markEl: attendGroup }
+    };
+
+    /* ------------------------------------------------------------------
+       BUILD THE CHECKBOXES
+       For each dish in the list above, create a checkbox with a matching
+       label. Linking label and checkbox (for/id) means clicking the words
+       ticks the box, and screen readers read the label aloud.
+       ------------------------------------------------------------------ */
+    DISHES.forEach(function (dish) {
+      const row = document.createElement('div');
+      row.className = 'choice';
+
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.id = 'bring-' + dish.id;
+      box.name = 'bring';
+      box.value = dish.id;
+
+      const label = document.createElement('label');
+      label.htmlFor = box.id;
+      label.textContent = dish.label;
+
+      row.appendChild(box);
+      row.appendChild(label);
+      dishList.appendChild(row);
+    });
+
+    /* ------------------------------------------------------------------
+       CHECK THE FORM FOR PROBLEMS
+       Looks at the required fields and returns a list of problems.
+       Each problem remembers which field it belongs to and what to say.
+       An empty list means everything is fine.
+       ------------------------------------------------------------------ */
+    function findProblems() {
+      const problems = [];
+      const name  = nameInput.value.trim();
+      const email = emailInput.value.trim();
+
+      // "field" is where keyboard focus goes; "key" links to the REQUIRED list above
+      if (name === '') {
+        problems.push({ key: 'name', field: nameInput, message: 'Enter your name' });
+      }
+
+      // A simple email shape check: something@something.something
+      const emailShape = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (email === '') {
+        problems.push({ key: 'email', field: emailInput, message: 'Enter your email address' });
+      } else if (!emailShape.test(email)) {
+        problems.push({ key: 'email', field: emailInput, message: 'Enter a valid email address, like julia@example.com' });
+      }
+
+      // v1.1 - one of the two attendance radios must be picked; focus goes to the first one
+      if (!form.querySelector('input[name="attending"]:checked')) {
+        problems.push({ key: 'attending', field: attendYes, message: 'Choose whether you will be attending' });
+      }
+
+      return problems;
+    }
+
+    /* ------------------------------------------------------------------
+       CLEAR OLD ERROR MESSAGES
+       Before showing new errors, wipe away the previous ones so stale
+       messages don't linger after the person fixes something.
+       ------------------------------------------------------------------ */
+    function clearErrors() {
+      Object.keys(REQUIRED).forEach(function (key) {
+        REQUIRED[key].markEl.removeAttribute('aria-invalid');
+        document.getElementById(key + '-error').textContent = '';
+      });
+      errorList.innerHTML = '';
+      summary.hidden = true;
+    }
+
+    /* ------------------------------------------------------------------
+       SHOW ERRORS
+       1. Put a message under each problem field and mark it invalid
+          (aria-invalid tells screen readers the field has an error).
+       2. Fill the summary box at the top with a clickable list. Because
+          that box has aria-live, screen readers announce it right away.
+       3. Move the keyboard focus to the first field with a problem.
+       ------------------------------------------------------------------ */
+    function showErrors(problems) {
+      problems.forEach(function (problem) {
+        REQUIRED[problem.key].markEl.setAttribute('aria-invalid', 'true');
+        document.getElementById(problem.key + '-error').textContent = 'Error: ' + problem.message;
+
+        // Each summary item is a link that jumps to (and focuses) the field
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = '#' + problem.field.id;
+        link.textContent = problem.message;
+        link.addEventListener('click', function (event) {
+          event.preventDefault();
+          problem.field.focus();
+        });
+        li.appendChild(link);
+        errorList.appendChild(li);
+      });
+
+      // Update the heading so it says how many problems there are
+      document.getElementById('error-summary-title').textContent =
+        problems.length === 1 ? 'There is 1 problem' : 'There are ' + problems.length + ' problems';
+
+      summary.hidden = false;
+      problems[0].field.focus();
+    }
+
+    /* ------------------------------------------------------------------
+       TURN THE ANSWERS INTO A LINK
+       The answers go after a "#" in the address (the "hash"). Browsers never
+       send the part after "#" to a server, so the answers stay private and
+       only live inside the link itself.
+       ------------------------------------------------------------------ */
+    function buildLink() {
+      const params = new URLSearchParams();
+      params.set('name', nameInput.value.trim());
+      params.set('email', emailInput.value.trim());
+
+      const attending = form.querySelector('input[name="attending"]:checked');
+      if (attending) params.set('attending', attending.value);
+
+      // Collect the codes of every ticked dish, joined with commas
+      const ticked = Array.from(form.querySelectorAll('input[name="bring"]:checked'))
+        .map(function (box) { return box.value; });
+      if (ticked.length) params.set('bring', ticked.join(','));
+
+      const notes = notesInput.value.trim();
+      if (notes) params.set('notes', notes);
+
+      // Start from the current page address, minus any old answers
+      const base = window.location.href.split('#')[0];
+      return base + '#' + params.toString();
+    }
+
+    /* ------------------------------------------------------------------
+       FILL THE FORM FROM A LINK
+       When the page opens, look at the part after "#". If it holds
+       answers, put each one back into its matching field.
+       Unknown dish codes are simply ignored.
+       ------------------------------------------------------------------ */
+    function fillFromLink() {
+      const hash = window.location.hash.slice(1); // drop the "#"
+      if (!hash) return;
+
+      const params = new URLSearchParams(hash);
+      if (!params.has('name') && !params.has('email')) return; // not one of our links
+
+      nameInput.value  = params.get('name')  || '';
+      emailInput.value = params.get('email') || '';
+      notesInput.value = params.get('notes') || '';
+
+      const attending = params.get('attending');
+      if (attending === 'yes' || attending === 'no') {
+        document.getElementById('attending-' + attending).checked = true;
+      }
+
+      const bring = (params.get('bring') || '').split(',');
+      bring.forEach(function (code) {
+        const box = document.getElementById('bring-' + code);
+        if (box) box.checked = true;
+      });
+    }
+
+    /* ------------------------------------------------------------------
+       WHEN THE FORM IS SUBMITTED
+       Stop the page from reloading, check for problems, then either show
+       the errors or show the shareable link (and move focus to it so
+       keyboard and screen-reader users know something happened).
+       ------------------------------------------------------------------ */
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      clearErrors();
+
+      const problems = findProblems();
+      if (problems.length) {
+        resultBox.hidden = true;
+        showErrors(problems);
+        return;
+      }
+
+      const link = buildLink();
+      shareLink.value = link;
+      copyStatus.textContent = '';
+      resultBox.hidden = false;
+
+      // Update the address bar too, without reloading, so a bookmark keeps the answers
+      history.replaceState(null, '', link);
+
+      resultTitle.focus();
+    });
+
+    /* ------------------------------------------------------------------
+       COPY BUTTON
+       Try the modern clipboard tool first. If the browser blocks it
+       (some do on local files), fall back to selecting the text and
+       using the older copy command. The result is announced politely.
+       ------------------------------------------------------------------ */
+    copyBtn.addEventListener('click', function () {
+      const text = shareLink.value;
+
+      function fallbackCopy() {
+        shareLink.focus();
+        shareLink.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        copyStatus.textContent = ok
+          ? 'Link copied to clipboard.'
+          : 'Could not copy automatically. The link is selected — press Ctrl+C (or Cmd+C) to copy.';
+      }
+
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text)
+          .then(function () { copyStatus.textContent = 'Link copied to clipboard.'; })
+          .catch(fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+    });
+
+    /* ------------------------------------------------------------------
+       CLEAR BUTTON
+       Empties every field, hides errors and the link, removes answers
+       from the address bar, and puts focus back on the first field.
+       ------------------------------------------------------------------ */
+    clearBtn.addEventListener('click', function () {
+      form.reset();
+      clearErrors();
+      resultBox.hidden = true;
+      history.replaceState(null, '', window.location.href.split('#')[0]);
+      nameInput.focus();
+    });
+
+    /* ------------------------------------------------------------------
+       LIVE FIX-UP
+       Once a field has been flagged, re-check it as the person types and
+       remove its error the moment it's fixed — so they aren't left staring
+       at an error they've already corrected.
+       ------------------------------------------------------------------ */
+    // v1.1 - works for the radio group too: "change" fires when a radio is picked
+    Object.keys(REQUIRED).forEach(function (key) {
+      const markEl = REQUIRED[key].markEl;
+      ['input', 'change'].forEach(function (eventName) {
+        markEl.addEventListener(eventName, function () {
+          if (markEl.getAttribute('aria-invalid') !== 'true') return;
+          const stillWrong = findProblems().some(function (p) { return p.key === key; });
+          if (!stillWrong) {
+            markEl.removeAttribute('aria-invalid');
+            document.getElementById(key + '-error').textContent = '';
+          }
+        });
+      });
+    });
+
+    /* Start up: refill the form if the page was opened with an answers link */
+    fillFromLink();
+  </script>
+</body>
+</html>
