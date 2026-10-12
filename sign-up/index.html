@@ -40,6 +40,9 @@
         --success-border: #8fbf6a;
         --focus: #8ab4ff;
       }
+      /* v1.2 - dark mode only: white text on the light orange button was ~3:1 contrast (fails WCAG AA);
+         dark text brings it to ~6:1. Light mode already passes, so it is untouched. */
+      button[type="submit"] { color: #1e1814; }
     }
 
     * { box-sizing: border-box; }
