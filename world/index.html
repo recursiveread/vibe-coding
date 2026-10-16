@@ -1,0 +1,1349 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!--
+  =====================================================================
+  MAPLE HOLLOW LAKE — a walkable 3D autumn world
+  =====================================================================
+  VERSION HISTORY
+  // v1.0 - initial build: rolling grass, autumn and pine trees, lake with
+  //        walkable dock and rowboat, red bench, sundial that reads the real
+  //        time, blue birdfeeder that swings when touched, on-screen controls,
+  //        and a written description of the scene for people who can't see it.
+  // v1.1 - keyboard fix: WASD, arrow keys and Q/E now work in full-screen
+  //        view. Keys are heard on the whole window instead of only when the
+  //        3D box has focus, and are ignored while a button or field is in use.
+  // v1.2 - white rowboat with seats, rim and oars. Click the boat (when
+  //        near it) to climb in and row around the lake; click the dock to
+  //        glide back and step out. Added a matching on-screen boat button.
+  // v1.3 - smoother getting out: clicks now pass through the boat you're
+  //        sitting in to reach the dock; clicks reach farther; if the boat is
+  //        beside the dock you step straight out; otherwise it turns and rows
+  //        back faster, and any rowing key cancels the trip.
+  // v1.4 - dry boat: the boat floats higher with a deeper hull, and wooden
+  //        floorboards above the waterline hide the lake surface inside it.
+  // v1.5 - reliable trip back to the dock: the boat now turns on the spot,
+  //        then moves in a straight line, stop by stop, ending with a straight
+  //        back-in beside the dock. It can no longer circle a stop or swing
+  //        into the dock, and you're always set down on the dock at the end.
+  // v1.6 - fix: after the boat docked itself, you were put back in the boat's
+  //        seat for one frame and then sank to the lake bottom. Also added a
+  //        safety net that returns you to the dock if you're ever over water.
+
+  LIBRARIES USED
+  1. A-Frame
+     - Version: 1.6.0 (pinned)
+     - Source:  jsDelivr CDN, mirroring the official npm package "aframe"
+                https://cdn.jsdelivr.net/npm/aframe@1.6.0/dist/aframe-master.min.js
+     - What it does: a web framework for building 3D scenes with HTML-like
+       tags. It bundles three.js (the 3D drawing engine) and handles the
+       camera, lighting, mouse-drag looking and clicking on 3D objects.
+  2. Google Fonts (stylesheet only, not a script)
+     - Families: Alegreya (headings) and Source Sans 3 (body text)
+     - Source:  https://fonts.googleapis.com
+     - What it does: provides the page's typefaces. System fonts are used
+       as a fallback if they don't load.
+
+  PRIVACY: nothing is sent to any server. Everything runs in your browser.
+  =====================================================================
+-->
+<title>Maple Hollow Lake</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A walkable 3D autumn meadow with a lake, dock, red bench, sundial and a swinging blue birdfeeder.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;700&family=Source+Sans+3:wght@400;600&display=swap">
+
+<style>
+  /* Layout: one centered column — title, the 3D window, a control strip, then the written description. */
+  :root {
+    --bg: #edf2ee;          /* pale meadow mist */
+    --panel: #ffffff;
+    --ink: #1d2a21;
+    --muted: #536257;
+    --line: #cdd8cf;
+    --maple: #b9481a;       /* autumn maple accent */
+    --pine: #2f5c3b;
+    --lake: #2b6f9e;
+    --focus: #1f6fd1;
+    --font-display: "Alegreya", Georgia, "Times New Roman", serif;
+    --font-body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111813; --panel: #19231c; --ink: #e3ebe4; --muted: #9eb1a3;
+      --line: #2b3b30; --maple: #ef8c4f; --pine: #86c296; --lake: #79b8e3;
+      --focus: #8cc1ff; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111813; --panel: #19231c; --ink: #e3ebe4; --muted: #9eb1a3;
+    --line: #2b3b30; --maple: #ef8c4f; --pine: #86c296; --lake: #79b8e3;
+    --focus: #8cc1ff; color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1.0625rem;
+    line-height: 1.55;
+  }
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding-block: 1.5rem 3rem;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  header { display: grid; gap: .35rem; }
+  .eyebrow {
+    font-size: .8rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--maple); font-weight: 600;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2rem, 5vw, 3.1rem);
+    line-height: 1.05;
+    margin: 0;
+    text-wrap: balance;
+  }
+  header p { margin: 0; color: var(--muted); max-width: 62ch; }
+
+  /* ---- The 3D window ---- */
+  .world {
+    position: relative;
+    height: clamp(340px, 68vh, 640px);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #8ccbf0;             /* sky colour while A-Frame loads */
+    border: 1px solid var(--line);
+    outline: none;
+  }
+  .world:focus-visible { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--focus); }
+  .world a-scene { width: 100%; height: 100%; display: block; }
+  .world-hint {
+    position: absolute;
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    top: 12px;
+    max-width: calc(100% - 24px);
+    background: rgba(18, 28, 20, .72);
+    color: #f3f6f2;
+    padding: .4rem .7rem;
+    border-radius: 8px;
+    font-size: .9rem;
+    pointer-events: none;
+    transition: opacity .3s;
+  }
+  .world.is-active .world-hint { opacity: 0; }
+  .load-error {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    padding: 1.5rem; text-align: center; background: var(--panel); color: var(--ink);
+  }
+
+  /* ---- Control strip ---- */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .pad {
+    display: grid;
+    grid-template-columns: repeat(3, 3.1rem);
+    gap: .4rem;
+  }
+  .btn {
+    font: inherit;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    min-height: 3.1rem;
+    padding: .4rem .8rem;
+    cursor: pointer;
+    touch-action: none;           /* lets a finger hold the button without scrolling */
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .pad .btn { padding: 0; font-size: 1.15rem; }
+  .btn:hover { border-color: var(--pine); }
+  .btn:active, .btn.is-held { background: var(--pine); color: var(--panel); border-color: var(--pine); }
+  .btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+  .actions .btn.feeder { border-color: var(--lake); color: var(--lake); }
+  .actions .btn.feeder:active { background: var(--lake); color: var(--panel); }
+
+  .status {
+    min-height: 1.6em;
+    color: var(--pine);
+    font-weight: 600;
+  }
+
+  /* ---- Keys and description ---- */
+  .info {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 1.5rem 2.5rem;
+    border-top: 1px solid var(--line);
+    padding-top: 1.5rem;
+  }
+  @media (max-width: 760px) { .info { grid-template-columns: minmax(0, 1fr); } }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    margin: 0 0 .5rem;
+    text-wrap: balance;
+  }
+  .info p { margin: 0 0 .8rem; max-width: 65ch; }
+  dl.keys {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .45rem 1rem;
+    margin: 0;
+  }
+  dl.keys dt { white-space: nowrap; }
+  dl.keys dd { margin: 0; color: var(--muted); }
+  kbd {
+    font-family: var(--font-body);
+    font-size: .85rem;
+    font-weight: 600;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: .05rem .4rem;
+  }
+  .note { font-size: .9rem; color: var(--muted); }
+
+  .visually-hidden {
+    position: absolute !important; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+</style>
+
+<!-- Load A-Frame first, so the custom components below can register with it. -->
+<script src="https://cdn.jsdelivr.net/npm/aframe@1.6.0/dist/aframe-master.min.js"></script>
+
+<script>
+/* =====================================================================
+   WORLD LAYOUT NUMBERS
+   These describe where things are. Units are metres. In A-Frame,
+   -z is "straight ahead" from where you start, +x is to your right,
+   and y is up.
+   ===================================================================== */
+const LAKE = { x: 0, z: -30, r: 13 };   // centre and radius of the lake bowl
+const WATER_Y = -0.35;                  // height of the water surface
+const EYE_HEIGHT = 1.6;                 // how tall the visitor's eyes are
+const WORLD_RADIUS = 95;                // how far you can wander from the middle
+const START = { x: 0, z: 4 };           // where you begin
+
+/* A tiny "random number" maker that gives the same results every visit,
+   so trees always grow in the same places. */
+function seededRandom(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Smoothly blends from 0 to 1 as x moves from edge0 to edge1.
+   Used to curve the ground gently down into the lake. */
+function smoothstep(edge0, edge1, x) {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
+/* THE SHAPE OF THE LAND.
+   Give it any spot (x, z) and it returns how high the grass is there.
+   A few overlapping sine waves make soft rolling hills; the land rises
+   toward the edges like a bowl; and near the lake it dips below the water. */
+function groundHeight(x, z) {
+  const raw = Math.sin(x * 0.07) * Math.cos(z * 0.06)
+            + 0.55 * Math.sin(x * 0.13 + z * 0.09 + 1.3)
+            + 0.3 * Math.cos(z * 0.21 - x * 0.05);
+  const far = Math.min(1, Math.hypot(x, z) / 60);       // 0 near the middle, 1 far away
+  let hills = (raw * 0.5 + 0.9) * (0.6 + far * 1.6) + far * far * 4;
+  const d = Math.hypot(x - LAKE.x, z - LAKE.z);
+  const lakeBlend = smoothstep(LAKE.r + 6, LAKE.r - 2, d); // 0 on dry land, 1 in the lake
+  return hills * (1 - lakeBlend) + -2.4 * lakeBlend;
+}
+
+/* Find where the shore is straight ahead of the starting spot, by walking
+   toward the lake until the ground drops below the water. The dock starts here. */
+function findShoreZ() {
+  for (let z = START.z; z > LAKE.z; z -= 0.1) {
+    if (groundHeight(0, z) < WATER_Y + 0.05) return z;
+  }
+  return LAKE.z + LAKE.r;
+}
+const SHORE_Z = findShoreZ();
+const DOCK = {
+  halfWidth: 1.1,
+  startZ: SHORE_Z + 1.4,                 // begins on dry land
+  endZ: SHORE_Z - 8.5,                   // reaches out over the water
+};
+DOCK.deckY = Math.max(groundHeight(0, DOCK.startZ), WATER_Y + 0.45) + 0.08;
+
+/* Spots for the bench, sundial and the tree holding the birdfeeder.
+   The bench and sundial sit on the shore, either side of the dock. */
+function shorePoint(angle, extra) {
+  return {
+    x: LAKE.x + Math.sin(angle) * (LAKE.r + extra),
+    z: LAKE.z + Math.cos(angle) * (LAKE.r + extra),
+  };
+}
+const BENCH = shorePoint(0.62, 7.2);
+const SUNDIAL = shorePoint(-0.7, 8.2);
+const FEEDER_TREE = { x: 5.2, z: -3.5 };
+const FEEDER = { x: FEEDER_TREE.x - 2.0, z: FEEDER_TREE.z, branchY: 2.35 };
+
+/* Things you can bump into. Each is a circle on the ground: you can't
+   walk inside it. Trees are added to this list as they're planted. */
+const OBSTACLES = [];
+
+/* Helper that creates an A-Frame entity, sets its settings, and
+   adds it to a parent. Keeps the building code short and readable. */
+function make(parent, settings, tag) {
+  const el = document.createElement(tag || 'a-entity');
+  for (const key in settings) el.setAttribute(key, settings[key]);
+  parent.appendChild(el);
+  return el;
+}
+
+/* Shared paint settings. "flatShading" gives the low-poly faceted look. */
+const paint = (color, extra) => Object.assign({ color, roughness: 1, metalness: 0, flatShading: true }, extra || {});
+
+/* =====================================================================
+   COMPONENT: rolling-terrain
+   Builds the grassy ground as one big sheet with thousands of points,
+   lifts each point to the height from groundHeight(), and colours it:
+   varied greens on the meadow, muddy sand along the shore.
+   ===================================================================== */
+AFRAME.registerComponent('rolling-terrain', {
+  init() {
+    const THREE = AFRAME.THREE;
+    const size = 240, segments = 150;
+    const geo = new THREE.PlaneGeometry(size, size, segments, segments);
+    geo.rotateX(-Math.PI / 2);              // lay the sheet flat
+    const pos = geo.attributes.position;
+    const colors = [];
+    const c = new THREE.Color();
+    const space = THREE.SRGBColorSpace;      // so our colours look as chosen
+    const grass = new THREE.Color(), sand = new THREE.Color().setHSL(0.11, 0.35, 0.48, space);
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const y = groundHeight(x, z);
+      pos.setY(i, y);
+      // A little ripple in hue and lightness so the grass isn't one flat green.
+      grass.setHSL(0.27 + 0.02 * Math.sin(x * 0.31 + z * 0.12),
+                   0.52,
+                   0.34 + 0.05 * Math.sin(x * 0.21 + z * 0.17) + 0.03 * Math.cos(z * 0.43),
+                   space);
+      // Blend toward sand close to the waterline.
+      const shore = smoothstep(WATER_Y + 0.55, WATER_Y + 0.1, y);
+      c.copy(grass).lerp(sand, shore);
+      colors.push(c.r, c.g, c.b);
+    }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.el.setObject3D('mesh', new THREE.Mesh(geo, mat));
+  },
+});
+
+/* =====================================================================
+   THE ROWBOAT'S STATE
+   Where the boat is, which way it points, and whether you're in it.
+   "home" is where it's tied up, beside the end of the dock.
+   heading is the boat's turn in radians (0 = bow pointing across the lake).
+   ===================================================================== */
+const BOAT = {
+  home: { x: 2.4, z: DOCK.endZ + 2.4, heading: 0 },
+  x: 0, z: 0, heading: 0,
+  aboard: false,        // true while you're sitting in it
+  returning: null,      // the route while it glides back to the dock
+  rowing: 0,            // how hard you're rowing (drives the oar animation)
+  el: null, oars: [],
+};
+
+/* How high the boat's rim sits above the water. The hull is 0.6 m deep,
+   so about 0.3 m of it sits under the water and the floorboards
+   (0.2 m below the rim) stay dry above the waterline. */
+const BOAT_FLOAT = 0.3;
+
+/* =====================================================================
+   COMPONENT: bob
+   Keeps the rowboat drawn where BOAT says it is, and gently rocks it
+   on the water. The rocking is skipped for visitors who ask their
+   device for reduced motion.
+   ===================================================================== */
+AFRAME.registerComponent('bob', {
+  tick(t) {
+    const o = this.el.object3D;
+    o.position.x = BOAT.x;
+    o.position.z = BOAT.z;
+    o.rotation.y = BOAT.heading;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      o.position.y = WATER_Y + BOAT_FLOAT;
+      return;
+    }
+    o.position.y = WATER_Y + BOAT_FLOAT + Math.sin(t / 900) * 0.04;
+    o.rotation.z = Math.sin(t / 1300) * 0.04;
+    // Oars sweep back and forth while you row, and rest still otherwise.
+    const sweep = BOAT.rowing ? Math.sin(t / 260) * 0.55 * BOAT.rowing : 0;
+    BOAT.oars.forEach(({ pivot, sideSign }) => {
+      pivot.object3D.rotation.y = sweep * sideSign;
+    });
+  },
+});
+
+/* =====================================================================
+   COMPONENT: swinging-feeder
+   Sits on the point where the feeder's rope ties to the branch.
+   When "pushed", it swings like a pendulum that slowly settles:
+   angle = size × (fading over time) × (back-and-forth wave).
+   ===================================================================== */
+AFRAME.registerComponent('swinging-feeder', {
+  init() {
+    this.swing = null;   // no swing until someone touches it
+    // Clicking or tapping any part of the feeder pushes it away from the viewer.
+    this.el.addEventListener('click', () => {
+      const cam = document.getElementById('cam').object3D;
+      const camPos = new AFRAME.THREE.Vector3();
+      cam.getWorldPosition(camPos);
+      this.push(FEEDER.x - camPos.x, FEEDER.z - camPos.z);
+    });
+  },
+  /* Start (or restart) a swing in the direction (dx, dz). */
+  push(dx, dz) {
+    const len = Math.hypot(dx, dz) || 1;
+    this.swing = { start: performance.now(), dirX: dx / len, dirZ: dz / len, size: 0.45 };
+    announce('The blue birdfeeder swings back and forth.');
+  },
+  tick() {
+    if (!this.swing) return;
+    const s = (performance.now() - this.swing.start) / 1000;  // seconds since the push
+    if (s > 9) {                                              // settled: stop and reset
+      this.el.object3D.rotation.set(0, 0, 0);
+      this.swing = null;
+      return;
+    }
+    const angle = this.swing.size * Math.exp(-s * 0.45) * Math.sin(s * 3.1);
+    // Tip around the axis that makes the feeder move along the push direction.
+    this.el.object3D.rotation.x = -angle * this.swing.dirZ;
+    this.el.object3D.rotation.z = angle * this.swing.dirX;
+  },
+});
+
+/* =====================================================================
+   COMPONENT: sundial-shadow
+   Turns the dark shadow line on the sundial's face to match the real
+   time on your device: each hour is 15 degrees, and noon points north
+   (straight across the lake).
+   ===================================================================== */
+AFRAME.registerComponent('sundial-shadow', {
+  init() { this.update(); this.timer = setInterval(() => this.update(), 60000); },
+  remove() { clearInterval(this.timer); },
+  update() {
+    const now = new Date();
+    const hours = now.getHours() + now.getMinutes() / 60;
+    // Clockwise from north as hours pass noon (morning shadows point west).
+    this.el.object3D.rotation.y = -((hours - 12) * 15) * Math.PI / 180;
+  },
+});
+
+/* Describe the sundial reading in words, for the status line. */
+function sundialReading() {
+  const h = new Date().getHours() % 12 || 12;
+  return 'The sundial’s shadow points to about ' + h + ' o’clock.';
+}
+
+/* =====================================================================
+   INPUT STATE
+   Which movement "keys" are currently held. Both the real keyboard and
+   the on-screen buttons switch these on and off.
+   ===================================================================== */
+const held = { forward: false, back: false, left: false, right: false, turnLeft: false, turnRight: false };
+
+/* =====================================================================
+   COMPONENT: walker
+   Lives on the player. Every frame it:
+   1. turns the view if Q/E (or the turn buttons) are held,
+   2. moves you in the direction you're facing,
+   3. stops you at trees, the bench, the sundial, the world's edge,
+      and the lake (unless you're on the dock),
+   4. keeps your feet on the ground or the dock deck,
+   5. notices when you walk into the birdfeeder,
+   6. tells screen-reader users where they are.
+   ===================================================================== */
+AFRAME.registerComponent('walker', {
+  init() {
+    this.cam = document.getElementById('cam');
+    this.zone = '';
+    this.nearFeeder = false;
+    this.lastWaterNote = 0;
+  },
+  onDock(x, z) {
+    return Math.abs(x) < DOCK.halfWidth && z <= DOCK.startZ && z >= DOCK.endZ;
+  },
+  blocked(x, z) {
+    if (Math.hypot(x, z) > WORLD_RADIUS) return 'edge';
+    for (const o of OBSTACLES) {
+      if (Math.hypot(x - o.x, z - o.z) < o.r) return 'thing';
+    }
+    if (!this.onDock(x, z) && groundHeight(x, z) < WATER_Y + 0.12) return 'water';
+    return '';
+  },
+  tick(time, delta) {
+    const dt = Math.min(delta || 16, 50) / 1000;   // seconds since last frame (capped)
+    const look = this.cam.components['look-controls'];
+    if (!look) return;
+
+    // While you're in the rowboat, the keys row the boat instead of walking.
+    if (BOAT.aboard) { this.boatTick(dt, look); return; }
+
+    // Safety net: if you're ever standing out over the water without being
+    // on the dock or in the boat, put you back on the end of the dock
+    // instead of letting you sink to the lake bottom.
+    const here = this.el.object3D.position;
+    if (!this.onDock(here.x, here.z) && groundHeight(here.x, here.z) < WATER_Y) {
+      here.set(0.2, DOCK.deckY, DOCK.endZ + 1.0);
+    }
+
+    // 1. Turning with Q / E or the turn buttons.
+    const turn = (held.turnLeft ? 1 : 0) - (held.turnRight ? 1 : 0);
+    if (turn) look.yawObject.rotation.y += turn * 1.7 * dt;
+
+    // 2. Work out which way is forward from where the camera faces.
+    const yaw = look.yawObject.rotation.y;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);   // forward
+    const rx = Math.cos(yaw), rz = -Math.sin(yaw);    // right
+    const ahead = (held.forward ? 1 : 0) - (held.back ? 1 : 0);
+    const side = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    const pos = this.el.object3D.position;
+
+    if (ahead || side) {
+      let mx = fx * ahead + rx * side, mz = fz * ahead + rz * side;
+      const len = Math.hypot(mx, mz);
+      const step = 3.6 * dt;                       // walking speed: 3.6 metres per second
+      mx = (mx / len) * step; mz = (mz / len) * step;
+
+      // 3. Try the full move; if blocked, try sliding along x or z alone.
+      const tryMove = [[mx, mz], [mx, 0], [0, mz]];
+      let moved = false, why = '';
+      for (const [ax, az] of tryMove) {
+        why = this.blocked(pos.x + ax, pos.z + az);
+        if (!why) { pos.x += ax; pos.z += az; moved = true; break; }
+      }
+      if (!moved && why === 'water' && time - this.lastWaterNote > 5000) {
+        this.lastWaterNote = time;
+        announce('The lake is too deep to wade into. Walk out on the dock instead.');
+      }
+    }
+
+    // 4. Stand on the dock deck or on the grass, easing smoothly up and down hills.
+    const floor = this.onDock(pos.x, pos.z)
+      ? Math.max(DOCK.deckY, groundHeight(pos.x, pos.z))
+      : groundHeight(pos.x, pos.z);
+    pos.y += (floor - pos.y) * Math.min(1, dt * 10);
+
+    // 5. Walking into the birdfeeder pushes it (once per visit to it).
+    const dFeeder = Math.hypot(pos.x - FEEDER.x, pos.z - FEEDER.z);
+    if (dFeeder < 0.85 && !this.nearFeeder) {
+      this.nearFeeder = true;
+      const feeder = document.getElementById('feeder-pivot');
+      feeder.components['swinging-feeder'].push(fx * ahead + rx * side || fx, fz * ahead + rz * side || fz);
+    } else if (dFeeder > 1.3) {
+      this.nearFeeder = false;
+    }
+
+    // 6. Announce the place you're in when it changes.
+    let zone = '';
+    if (this.onDock(pos.x, pos.z) && pos.z < DOCK.endZ + 1.6) zone = 'dock-end';
+    else if (this.onDock(pos.x, pos.z) && groundHeight(pos.x, pos.z) < WATER_Y) zone = 'dock';
+    else if (Math.hypot(pos.x - BENCH.x, pos.z - BENCH.z) < 2.6) zone = 'bench';
+    else if (Math.hypot(pos.x - SUNDIAL.x, pos.z - SUNDIAL.z) < 2.6) zone = 'sundial';
+    else if (dFeeder < 2.2) zone = 'feeder';
+    if (zone !== this.zone) {
+      this.zone = zone;
+      const messages = {
+        'dock': 'You are walking on the wooden dock, over the water.',
+        'dock-end': 'You reached the end of the dock. A white rowboat floats beside you.',
+        'bench': 'You are beside the red bench, facing the lake.',
+        'sundial': 'You are at the stone sundial. ' + sundialReading(),
+        'feeder': 'The blue birdfeeder hangs from a branch just ahead.',
+      };
+      if (messages[zone]) announce(messages[zone]);
+    }
+  },
+
+  /* ROWING. Runs every frame while you sit in the boat.
+     - W / up arrow rows forward, S / down arrow rows backward.
+     - A / D, left / right arrows, or Q / E turn the boat.
+     - The boat can't leave deep water or pass through the dock.
+     - Your view turns along with the boat, and you stay seated in it. */
+  boatTick(dt, look) {
+    const pos = this.el.object3D.position;
+
+    // Pressing any rowing key during the trip back cancels it.
+    if (BOAT.returning && Object.values(held).some(Boolean)) {
+      BOAT.returning = null;
+      announce('You took the oars again.');
+    }
+    if (BOAT.returning) {
+      glideBackToDock(dt, look);
+      // If that last step set you down on the dock, stop here. Without this
+      // check, the "keep you seated" line below would put you straight back
+      // at the boat's seat, out over the water, and you'd sink to the bottom.
+      if (!BOAT.aboard) return;
+    } else {
+      const turn = ((held.left || held.turnLeft) ? 1 : 0) - ((held.right || held.turnRight) ? 1 : 0);
+      const row = (held.forward ? 1 : 0) - (held.back ? 1 : 0);
+      if (turn) {
+        const da = turn * 0.9 * dt;                     // turning speed: about 50 degrees a second
+        if (boatFits(BOAT.x, BOAT.z, BOAT.heading + da)) {
+          BOAT.heading += da;
+          look.yawObject.rotation.y += da;              // turn your view with the boat
+        }
+      }
+      if (row) {
+        const speed = 2.2 * row * dt;                    // rowing speed: 2.2 metres a second
+        const nx = BOAT.x - Math.sin(BOAT.heading) * speed;
+        const nz = BOAT.z - Math.cos(BOAT.heading) * speed;
+        if (boatFits(nx, nz, BOAT.heading)) {
+          BOAT.x = nx; BOAT.z = nz;
+        } else if (performance.now() - this.lastWaterNote > 4000) {
+          this.lastWaterNote = performance.now();
+          announce('The rowboat bumps into the shallows. Turn and row the other way.');
+        }
+      }
+      BOAT.rowing = (row || turn) ? 1 : 0;
+    }
+
+    // Keep you sitting on the back seat, facing the front of the boat.
+    pos.set(BOAT.x + Math.sin(BOAT.heading) * 0.35,
+            WATER_Y - 0.35,                // seated: eyes about 1.25 m above the water
+            BOAT.z + Math.cos(BOAT.heading) * 0.35);
+  },
+});
+
+/* =====================================================================
+   ROWBOAT HELPERS
+   ===================================================================== */
+
+/* Would the boat fit here? Checks five points around the hull (front,
+   back, middle and both sides): each must be over deep enough water and
+   not inside the dock. */
+function boatFits(x, z, heading) {
+  const cos = Math.cos(heading), sin = Math.sin(heading);
+  const points = [[0, -1.9], [0, 1.9], [0, 0], [-0.75, 0], [0.75, 0]];
+  for (const [lx, lz] of points) {
+    const px = x + lx * cos + lz * sin;      // turn the point to match the boat's heading
+    const pz = z - lx * sin + lz * cos;
+    if (groundHeight(px, pz) > WATER_Y - 0.35) return false;          // too shallow
+    if (Math.abs(px) < DOCK.halfWidth + 0.2 && pz <= DOCK.startZ && pz >= DOCK.endZ - 0.2) return false; // dock
+  }
+  return true;
+}
+
+/* Climb into the boat, if you're close enough to reach it. */
+function boardBoat() {
+  const rig = document.getElementById('rig').object3D.position;
+  if (Math.hypot(rig.x - BOAT.x, rig.z - BOAT.z) > 6) {
+    announce('The rowboat is tied at the end of the dock. Walk out there to climb in.');
+    return;
+  }
+  BOAT.aboard = true;
+  BOAT.returning = null;
+  setBoatClickable(false);   // so clicks pass through the boat you're sitting in, to the dock
+  const look = document.getElementById('cam').components['look-controls'];
+  if (look) { look.yawObject.rotation.y = BOAT.heading; look.pitchObject.rotation.x = 0; }
+  updateBoatButton();
+  announce('You climbed into the white rowboat. Row with W and S or the up and down arrows, and turn with A and D. Click the dock to get out.');
+}
+
+/* While you sit in the boat, its own parts must not catch your clicks:
+   they surround you, so they'd block every click aimed at the dock.
+   This switches the boat's "clickable" tag off (or back on) and tells
+   A-Frame's click detector to re-check which things are clickable. */
+function setBoatClickable(on) {
+  document.querySelectorAll('.boat-part').forEach(el => el.classList.toggle('clickable', on));
+  const ray = document.querySelector('a-scene').components.raycaster;
+  if (ray) ray.refreshObjects();
+}
+
+/* How far is the boat from the dock? Measures from the boat's middle to
+   the nearest point on the dock's outline (0 means touching it). */
+function boatDistanceToDock() {
+  const cx = Math.max(-DOCK.halfWidth, Math.min(DOCK.halfWidth, BOAT.x));
+  const cz = Math.max(DOCK.endZ, Math.min(DOCK.startZ, BOAT.z));
+  return Math.hypot(BOAT.x - cx, BOAT.z - cz);
+}
+
+/* Clicking the dock (or the boat button) to get out.
+   - If the boat is already beside the dock, you step straight out onto
+     the nearest bit of dock, and the boat stays where you left it.
+   - If you're out on the lake, the boat rows itself back to its spot
+     at the end of the dock first. Pressing a rowing key on the way
+     cancels the trip, so you're never stuck. */
+function leaveBoat() {
+  if (!BOAT.aboard || BOAT.returning) return;
+  if (boatDistanceToDock() < 3.4) {
+    const look = document.getElementById('cam').components['look-controls'];
+    const z = Math.max(DOCK.endZ + 0.5, Math.min(DOCK.startZ - 0.8, BOAT.z));
+    const x = Math.max(-0.6, Math.min(0.6, BOAT.x));   // the side of the dock nearest the boat
+    stepOntoDock(look, { x, z, keepBoatHere: true });
+    return;
+  }
+  /* Plan the trip home as a short list of stops. Every trip ends the same
+     way: the boat goes to a spot in open water just past the end of the
+     dock ("the turning spot"), turns to face out over the lake, then
+     backs straight into its place beside the dock. That last move is
+     always a straight line, so the boat can't miss its spot or circle. */
+  const turningSpot = { x: BOAT.home.x, z: DOCK.endZ - 3.2 };
+  const route = [];
+  if (BOAT.x < 0) {
+    // On the far (left) side of the dock: go round the end of the dock first.
+    route.push({ x: -2.8, z: DOCK.endZ - 3.2 });
+  }
+  route.push(turningSpot);
+  route.push({ x: BOAT.home.x, z: BOAT.home.z, heading: BOAT.home.heading });
+  BOAT.returning = route;
+  BOAT.phase = 'turn';
+  announce('The rowboat is heading back to the dock. Press a rowing key to stop and row yourself.');
+}
+
+/* Turns a heading toward "want" by at most maxStep. Returns how much it
+   actually turned (always taking the shorter way round). */
+function turnToward(want, maxStep) {
+  const diff = Math.atan2(Math.sin(want - BOAT.heading), Math.cos(want - BOAT.heading));
+  const da = Math.max(-maxStep, Math.min(maxStep, diff));
+  BOAT.heading += da;
+  return da;
+}
+
+/* Each frame of the trip back. The boat works through its stops in two
+   simple steps per stop, like a careful rower:
+   1. "turn": swing round on the spot until it points the right way,
+   2. "move": travel in a straight line to the stop.
+   Doing one thing at a time means the boat always reaches each stop.
+   For the final stop the boat keeps facing the lake and backs in.
+   When the last stop is reached, you step out onto the dock. */
+function glideBackToDock(dt, look) {
+  const stop = BOAT.returning[0];
+  const dx = stop.x - BOAT.x, dz = stop.z - BOAT.z;
+  const dist = Math.hypot(dx, dz);
+  BOAT.rowing = 1;
+
+  // Which way should the bow point for this stop?
+  // Normally toward the stop; for the final stop, the stop's own heading.
+  const want = (stop.heading !== undefined) ? stop.heading : Math.atan2(-dx, -dz);
+
+  if (BOAT.phase === 'turn') {
+    const da = turnToward(want, 1.6 * dt);          // about 90 degrees a second
+    look.yawObject.rotation.y += da;                // your view turns with the boat
+    if (Math.abs(da) < 1.6 * dt - 1e-6 || dist < 0.05) BOAT.phase = 'move';  // finished turning
+    return;
+  }
+
+  // "move": straight line to the stop at 4 metres a second.
+  const step = 4 * dt;
+  if (dist <= step) {
+    BOAT.x = stop.x; BOAT.z = stop.z;
+    BOAT.returning.shift();
+    BOAT.phase = 'turn';
+    if (!BOAT.returning.length) stepOntoDock(look);
+    return;
+  }
+  BOAT.x += (dx / dist) * step;
+  BOAT.z += (dz / dist) * step;
+}
+
+/* Step out of the boat onto the dock.
+   spot: where on the dock to stand. Without one, you land at the end of
+   the dock and the boat is tied back in its usual place.
+   keepBoatHere: leave the boat where it is (it's already beside the dock). */
+function stepOntoDock(look, spot) {
+  BOAT.aboard = false;
+  BOAT.returning = null;
+  BOAT.rowing = 0;
+  if (!(spot && spot.keepBoatHere)) {
+    BOAT.x = BOAT.home.x; BOAT.z = BOAT.home.z; BOAT.heading = BOAT.home.heading;
+  }
+  setBoatClickable(true);
+  const rig = document.getElementById('rig').object3D.position;
+  const x = spot ? spot.x : 0.2;
+  const z = spot ? spot.z : DOCK.endZ + 1.0;
+  rig.set(x, DOCK.deckY, z);
+  if (look) { look.yawObject.rotation.y = 0; look.pitchObject.rotation.x = 0; }  // face out over the lake
+  updateBoatButton();
+  announce('You stepped out of the rowboat onto the dock. Click the boat to get back in.');
+}
+
+/* Keep the boat button's words matching what it will do. */
+function updateBoatButton() {
+  const btn = document.getElementById('boat-btn');
+  if (btn) btn.textContent = BOAT.aboard ? 'Get out at the dock' : 'Get in the rowboat';
+}
+
+/* =====================================================================
+   STATUS MESSAGES
+   Writes a short sentence into a "live region": screen readers read it
+   out loud, and sighted visitors see it under the scene.
+   ===================================================================== */
+function announce(text) {
+  const box = document.getElementById('status');
+  if (!box) return;
+  box.textContent = '';
+  // A tiny pause makes screen readers repeat a message even if it's the same.
+  setTimeout(() => { box.textContent = text; }, 40);
+}
+</script>
+
+<div class="page">
+  <header>
+    <span class="eyebrow">A walkable autumn afternoon</span>
+    <h1>Maple Hollow Lake</h1>
+    <p>Wander through rolling grass and autumn trees, walk out on the dock, and give the blue birdfeeder a nudge.</p>
+  </header>
+
+  <main>
+    <!--
+      The 3D window. It can take keyboard focus (tabindex="0") so the
+      arrow keys move you only while you're "inside" the scene, and don't
+      scroll the page the rest of the time.
+    -->
+    <div class="world" id="world" tabindex="0" role="application"
+         aria-label="3D lakeside world. Use W A S D or the arrow keys to walk, Q and E to turn, and drag with the mouse to look around."
+         aria-describedby="world-description">
+      <div class="world-hint" aria-hidden="true">Click or tab into the scene, then walk with WASD or arrow keys. Drag to look around.</div>
+
+      <a-scene embedded
+               vr-mode-ui="enabled: false"
+               keyboard-shortcuts="enterVR: false"
+               renderer="antialias: true; colorManagement: true"
+               fog="type: linear; color: #bfe0f3; near: 45; far: 150"
+               cursor="rayOrigin: mouse"
+               raycaster="objects: .clickable; far: 80">
+
+        <!-- Clear blue sky surrounding everything. -->
+        <a-sky color="#86c6ee"></a-sky>
+
+        <!-- Lighting: soft sky-and-grass fill light, plus warm late-afternoon sun. -->
+        <a-entity light="type: hemisphere; color: #dcefff; groundColor: #4a6b32; intensity: 0.85"></a-entity>
+        <a-entity light="type: directional; color: #fff1d6; intensity: 1.1" position="-30 40 20"></a-entity>
+
+        <!-- The ground, built by the rolling-terrain component above. -->
+        <a-entity rolling-terrain></a-entity>
+
+        <!-- The lake's surface: a flat blue disc at water level. -->
+        <a-entity id="lake"
+                  geometry="primitive: circle; radius: 22; segments: 64"
+                  rotation="-90 0 0"
+                  material="color: #2e7ab3; roughness: 0.25; metalness: 0.1; opacity: 0.9; transparent: true"></a-entity>
+
+        <!-- Groups that the world-building script fills in. -->
+        <a-entity id="trees"></a-entity>
+        <a-entity id="props"></a-entity>
+        <a-entity id="clouds"></a-entity>
+
+        <!-- The visitor: "rig" is your feet, "cam" is your eyes. -->
+        <a-entity id="rig" walker>
+          <a-entity id="cam" camera
+                    look-controls="pointerLockEnabled: false; magicWindowTrackingEnabled: false"
+                    position="0 1.6 0"></a-entity>
+        </a-entity>
+      </a-scene>
+    </div>
+
+    <!-- On-screen controls: useful on phones and tablets, and for anyone who prefers buttons. -->
+    <section class="controls" aria-label="Movement controls">
+      <div class="pad" role="group" aria-label="Walk and turn">
+        <button class="btn" type="button" data-move="turnLeft" aria-label="Turn left">&#x21B6;</button>
+        <button class="btn" type="button" data-move="forward" aria-label="Walk forward">&#x25B2;</button>
+        <button class="btn" type="button" data-move="turnRight" aria-label="Turn right">&#x21B7;</button>
+        <button class="btn" type="button" data-move="left" aria-label="Step left">&#x25C0;</button>
+        <button class="btn" type="button" data-move="back" aria-label="Walk backward">&#x25BC;</button>
+        <button class="btn" type="button" data-move="right" aria-label="Step right">&#x25B6;</button>
+      </div>
+      <div class="actions">
+        <button class="btn feeder" type="button" id="nudge">Nudge the birdfeeder</button>
+        <button class="btn" type="button" id="boat-btn">Get in the rowboat</button>
+        <button class="btn" type="button" id="reset">Back to start</button>
+      </div>
+    </section>
+
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+
+    <section class="info">
+      <div>
+        <h2 id="about-heading">What&rsquo;s in the scene</h2>
+        <div id="world-description">
+          <p>It&rsquo;s a sunny autumn afternoon in a wide meadow of rolling green grass under a clear blue sky with a few white clouds. Trees with orange, red and golden leaves stand among dark green pine trees, and fallen leaves dot the grass.</p>
+          <p>Straight ahead is a round blue lake. A wooden boat dock runs from the shore out over the water, and you can walk all the way to its end, where a white rowboat with wooden seats and oars is tied up. Click the boat to climb in and row around the lake; click the dock to row back and step out. A red bench sits on the shore to the right, facing the lake. To the left stands a stone sundial with a brass face; its shadow follows the real time of day.</p>
+          <p>Near where you start, a blue birdfeeder hangs by a rope from the branch of an orange tree. Walk into it or click it and it swings back and forth, then slowly comes to rest.</p>
+        </div>
+      </div>
+      <div>
+        <h2>How to move</h2>
+        <dl class="keys">
+          <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Walk forward, left, back, right</dd>
+          <dt><kbd>&uarr;</kbd> <kbd>&larr;</kbd> <kbd>&darr;</kbd> <kbd>&rarr;</kbd></dt><dd>Same as W A S D</dd>
+          <dt><kbd>Q</kbd> <kbd>E</kbd></dt><dd>Turn left or right</dd>
+          <dt>Drag</dt><dd>Look around (mouse or finger)</dd>
+          <dt>Click</dt><dd>Touch the birdfeeder, climb into the rowboat, or click the dock to get out</dd>
+          <dt>In the boat</dt><dd><kbd>W</kbd> <kbd>S</kbd> row forward and back; <kbd>A</kbd> <kbd>D</kbd> turn</dd>
+        </dl>
+        <p class="note">Click or tab into the scene first so the keys reach it. Press <kbd>Tab</kbd> to leave.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* =====================================================================
+   SAFETY CHECK
+   If A-Frame couldn't load (offline, blocked network), show a friendly
+   message in place of the 3D window instead of a blank box.
+   ===================================================================== */
+if (!window.AFRAME) {
+  const world = document.getElementById('world');
+  world.innerHTML = '<div class="load-error"><p>The 3D scene couldn’t load. Check your internet connection and reload the page. The written description below still tells you what’s in it.</p></div>';
+}
+
+/* =====================================================================
+   BUILD THE WORLD
+   Once the scene is ready, plant trees, build the dock, bench, sundial,
+   birdfeeder, rowboat and clouds, and place you at the start.
+   ===================================================================== */
+const scene = document.querySelector('a-scene');
+if (scene) {
+  const ready = () => buildWorld();
+  if (scene.hasLoaded) ready(); else scene.addEventListener('loaded', ready);
+}
+
+function buildWorld() {
+  const rand = seededRandom(20261015);
+  const trees = document.getElementById('trees');
+  const props = document.getElementById('props');
+  const lake = document.getElementById('lake');
+  lake.setAttribute('position', { x: LAKE.x, y: WATER_Y, z: LAKE.z });
+
+  const AUTUMN = ['#d4531c', '#e8872a', '#c23a22', '#f0b02e', '#b8601a', '#e06a24'];
+
+  /* An autumn (leafy) tree: a brown trunk and a cluster of chunky
+     leaf balls in a fall colour. */
+  function autumnTree(x, z, scale, color) {
+    const y = groundHeight(x, z);
+    const tree = make(trees, { position: { x, y, z }, scale: { x: scale, y: scale, z: scale } });
+    make(tree, {
+      geometry: { primitive: 'cylinder', radius: 0.22, height: 3, segmentsRadial: 7 },
+      material: paint('#5b3a22'), position: '0 1.5 0',
+    });
+    const blobs = [[0, 3.6, 0, 1.55], [0.85, 3.1, 0.3, 1.05], [-0.8, 3.2, -0.25, 1.1], [0.15, 4.4, -0.2, 1.0]];
+    blobs.forEach(([bx, by, bz, r], i) => {
+      make(tree, {
+        geometry: { primitive: 'sphere', radius: r, segmentsWidth: 7, segmentsHeight: 5 },
+        material: paint(i === 3 ? AUTUMN[(AUTUMN.indexOf(color) + 1) % AUTUMN.length] : color),
+        position: { x: bx, y: by, z: bz },
+      });
+    });
+    OBSTACLES.push({ x, z, r: 0.55 * scale });
+    return tree;
+  }
+
+  /* A pine tree: a slim trunk with three stacked dark-green cones. */
+  function pineTree(x, z, scale) {
+    const y = groundHeight(x, z);
+    const tree = make(trees, { position: { x, y, z }, scale: { x: scale, y: scale, z: scale } });
+    make(tree, {
+      geometry: { primitive: 'cylinder', radius: 0.18, height: 1.6, segmentsRadial: 6 },
+      material: paint('#4a3020'), position: '0 0.8 0',
+    });
+    [[1.0, 1.9, 2.2], [1.55, 1.5, 1.9], [2.6, 1.05, 1.6]].forEach(([cy, r, h], i) => {
+      make(tree, {
+        geometry: { primitive: 'cone', radiusBottom: r, radiusTop: 0, height: h, segmentsRadial: 8 },
+        material: paint(i % 2 ? '#24502f' : '#1d4428'),
+        position: { x: 0, y: cy + h / 2, z: 0 },
+      });
+    });
+    OBSTACLES.push({ x, z, r: 0.45 * scale });
+  }
+
+  /* ---------- Plant trees in random (but repeatable) places ----------
+     Trees avoid the lake, the dock path, the starting spot, and the
+     bench, sundial and birdfeeder so those stay easy to reach. */
+  function spotIsFree(x, z) {
+    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 9) return false;
+    if (Math.abs(x) < 4 && z < START.z + 3 && z > DOCK.endZ) return false;
+    if (Math.hypot(x - START.x, z - START.z) < 6) return false;
+    if (Math.hypot(x - BENCH.x, z - BENCH.z) < 5) return false;
+    if (Math.hypot(x - SUNDIAL.x, z - SUNDIAL.z) < 5) return false;
+    if (Math.hypot(x - FEEDER_TREE.x, z - FEEDER_TREE.z) < 5) return false;
+    for (const o of OBSTACLES) if (Math.hypot(x - o.x, z - o.z) < 4.5) return false;
+    return true;
+  }
+  let planted = 0, tries = 0;
+  while (planted < 55 && tries < 3000) {
+    tries++;
+    const angle = rand() * Math.PI * 2;
+    const dist = 7 + rand() * 75;
+    const x = Math.cos(angle) * dist, z = Math.sin(angle) * dist - 8;
+    if (!spotIsFree(x, z)) continue;
+    const scale = 0.85 + rand() * 0.6;
+    if (rand() < 0.55) autumnTree(x, z, scale, AUTUMN[Math.floor(rand() * AUTUMN.length)]);
+    else pineTree(x, z, scale * 1.15);
+    planted++;
+  }
+
+  /* ---------- Fallen leaves scattered on the grass ---------- */
+  for (let i = 0; i < 140; i++) {
+    const x = (rand() - 0.5) * 70, z = (rand() - 0.5) * 70 - 5;
+    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 6) continue;
+    make(props, {
+      geometry: { primitive: 'circle', radius: 0.09 + rand() * 0.08, segments: 5 },
+      material: paint(AUTUMN[Math.floor(rand() * AUTUMN.length)], { side: 'double' }),
+      position: { x, y: groundHeight(x, z) + 0.03, z },
+      rotation: { x: -90, y: 0, z: rand() * 360 },
+    });
+  }
+
+  /* ---------- The tree that holds the birdfeeder ----------
+     An orange autumn tree with one long branch reaching out. A rope
+     hangs from the branch tip, and the feeder hangs from the rope. */
+  const fy = groundHeight(FEEDER_TREE.x, FEEDER_TREE.z);
+  autumnTree(FEEDER_TREE.x, FEEDER_TREE.z, 1.05, '#e8872a');
+  make(props, {
+    geometry: { primitive: 'cylinder', radius: 0.07, height: 2.3, segmentsRadial: 6 },
+    material: paint('#5b3a22'),
+    position: { x: FEEDER_TREE.x - 1.1, y: fy + FEEDER.branchY + 0.05, z: FEEDER_TREE.z },
+    rotation: '0 0 85',
+  });
+  // The pivot is where the rope ties on. Everything below it swings together.
+  const pivot = make(props, {
+    id: 'feeder-pivot',
+    'swinging-feeder': '',
+    position: { x: FEEDER.x, y: fy + FEEDER.branchY, z: FEEDER.z },
+  });
+  make(pivot, {
+    geometry: { primitive: 'cylinder', radius: 0.012, height: 0.5, segmentsRadial: 5 },
+    material: paint('#a07c4e'), position: '0 -0.25 0',
+  });
+  const feederParts = [
+    // roof: a four-sided pyramid
+    { geometry: { primitive: 'cone', radiusBottom: 0.34, radiusTop: 0, height: 0.22, segmentsRadial: 4 },
+      material: paint('#1d4c99'), position: '0 -0.6 0', rotation: '0 45 0' },
+    // house body
+    { geometry: { primitive: 'box', width: 0.34, height: 0.32, depth: 0.34 },
+      material: paint('#2f6fd8'), position: '0 -0.87 0' },
+    // round entrance holes, front and back
+    { geometry: { primitive: 'circle', radius: 0.06, segments: 12 },
+      material: paint('#10203a'), position: '0 -0.84 0.172' },
+    { geometry: { primitive: 'circle', radius: 0.06, segments: 12 },
+      material: paint('#10203a'), position: '0 -0.84 -0.172', rotation: '0 180 0' },
+    // seed tray underneath
+    { geometry: { primitive: 'box', width: 0.5, height: 0.04, depth: 0.5 },
+      material: paint('#2558b0'), position: '0 -1.05 0' },
+    // a little pile of seed on the tray
+    { geometry: { primitive: 'box', width: 0.36, height: 0.03, depth: 0.08 },
+      material: paint('#d9b46a'), position: '0 -1.02 0.19' },
+  ];
+  feederParts.forEach(p => { const el = make(pivot, p); el.classList.add('clickable'); });
+
+  /* ---------- The boat dock ----------
+     Wooden planks laid across the dock, posts going down into the
+     water, and low edge boards along each side. */
+  const dock = make(props, {});
+  const plankDepth = 0.26, gap = 0.04;
+  let n = 0;
+  for (let z = DOCK.startZ - plankDepth / 2; z > DOCK.endZ; z -= plankDepth + gap) {
+    make(dock, {
+      geometry: { primitive: 'box', width: DOCK.halfWidth * 2 + 0.1, height: 0.08, depth: plankDepth },
+      material: paint(n++ % 2 ? '#8b6541' : '#7c5837'),
+      position: { x: 0, y: DOCK.deckY - 0.04, z },
+    });
+  }
+  for (let z = DOCK.startZ - 0.3; z >= DOCK.endZ - 0.01; z -= 2.4) {
+    [-1, 1].forEach(sideSign => {
+      const bottom = Math.min(groundHeight(sideSign * DOCK.halfWidth, z), WATER_Y) - 1.5;
+      const height = DOCK.deckY + 0.25 - bottom;
+      make(dock, {
+        geometry: { primitive: 'cylinder', radius: 0.1, height, segmentsRadial: 7 },
+        material: paint('#5c412a'),
+        position: { x: sideSign * (DOCK.halfWidth + 0.05), y: bottom + height / 2, z },
+      });
+    });
+  }
+  const dockLen = DOCK.startZ - DOCK.endZ;
+  [-1, 1].forEach(sideSign => {
+    make(dock, {
+      geometry: { primitive: 'box', width: 0.08, height: 0.14, depth: dockLen },
+      material: paint('#6b4b30'),
+      position: { x: sideSign * (DOCK.halfWidth + 0.05), y: DOCK.deckY + 0.04, z: (DOCK.startZ + DOCK.endZ) / 2 },
+    });
+  });
+
+  /* ---------- The white rowboat tied at the end of the dock ----------
+     A stretched half-sphere makes the white hull. A wooden rim runs
+     around the top edge, two wooden seats cross it, and a pair of oars
+     rest in oarlocks on each side. Every part is clickable: clicking
+     the boat climbs you in. The bow (front) points toward -z. */
+  BOAT.x = BOAT.home.x; BOAT.z = BOAT.home.z; BOAT.heading = BOAT.home.heading;
+  const boat = make(props, { id: 'rowboat', bob: '', position: { x: BOAT.x, y: WATER_Y, z: BOAT.z } });
+  BOAT.el = boat;
+  const boatParts = [
+    // white hull
+    { geometry: { primitive: 'sphere', radius: 1, thetaStart: 90, thetaLength: 90, segmentsWidth: 18, segmentsHeight: 7 },
+      material: paint('#f8f8f4', { side: 'double', flatShading: false, roughness: 0.6 }),
+      scale: '0.78 0.6 2.0' },
+    // a darker band inside so the hull reads as hollow
+    { geometry: { primitive: 'sphere', radius: 0.97, thetaStart: 100, thetaLength: 80, segmentsWidth: 18, segmentsHeight: 6 },
+      material: paint('#d9d6cc', { side: 'back' }), scale: '0.78 0.6 2.0' },
+    // Wooden floorboards. They sit above the waterline and fill the
+    // inside of the hull, so the lake's surface can't show through the
+    // bottom of the boat. (The oval matches the hull's width at this height.)
+    { geometry: { primitive: 'circle', radius: 1, segments: 32 },
+      material: paint('#a77b4f'), rotation: '-90 0 0', position: '0 -0.2 0', scale: '0.73 1.87 1' },
+    { geometry: { primitive: 'box', width: 0.03, height: 0.01, depth: 3.2 },
+      material: paint('#7d5837'), position: '-0.22 -0.195 0' },
+    { geometry: { primitive: 'box', width: 0.03, height: 0.01, depth: 3.2 },
+      material: paint('#7d5837'), position: '0.22 -0.195 0' },
+    // wooden rim (gunwale) around the top edge
+    { geometry: { primitive: 'torus', radius: 0.78, radiusTubular: 0.035, segmentsRadial: 5, segmentsTubular: 32 },
+      material: paint('#8b6541'), rotation: '90 0 0', scale: '1 2.56 1', position: '0 0.01 0' },
+    // two seats
+    { geometry: { primitive: 'box', width: 1.38, height: 0.05, depth: 0.26 },
+      material: paint('#9a7048'), position: '0 -0.06 0.35' },
+    { geometry: { primitive: 'box', width: 1.2, height: 0.05, depth: 0.24 },
+      material: paint('#9a7048'), position: '0 -0.06 -0.75' },
+  ];
+  boatParts.forEach(p => { const el = make(boat, p); el.classList.add('clickable', 'boat-part'); });
+
+  // Oars: each one hangs from a pivot at its oarlock so it can sweep when rowing.
+  BOAT.oars = [-1, 1].map(sideSign => {
+    const pivot = make(boat, { position: { x: sideSign * 0.76, y: 0.06, z: 0.05 } });
+    const oar = make(pivot, { rotation: { x: 0, y: 0, z: sideSign * -22 } });
+    make(oar, {
+      geometry: { primitive: 'cylinder', radius: 0.025, height: 2.0, segmentsRadial: 6 },
+      material: paint('#b88a55'), position: { x: sideSign * 0.55, y: 0, z: 0 }, rotation: '0 0 90',
+      class: 'clickable boat-part',
+    });
+    make(oar, {
+      geometry: { primitive: 'box', width: 0.45, height: 0.03, depth: 0.14 },
+      material: paint('#f8f8f4'), position: { x: sideSign * 1.45, y: 0, z: 0 },
+      class: 'clickable boat-part',
+    });
+    return { pivot, sideSign };
+  });
+
+  // Click the boat to climb in (only when you're close enough to reach it).
+  boat.addEventListener('click', () => { if (!BOAT.aboard) boardBoat(); });
+  // Click the dock to get out of the boat.
+  dock.classList.add('dock');
+  Array.from(dock.children).forEach(el => el.classList.add('clickable'));
+  dock.addEventListener('click', () => { if (BOAT.aboard) leaveBoat(); });
+
+  /* ---------- The red bench ----------
+     Seat and back slats in red, dark iron legs. It's turned so the
+     seat faces the lake. */
+  const by = groundHeight(BENCH.x, BENCH.z);
+  const benchYaw = Math.atan2(LAKE.x - BENCH.x, LAKE.z - BENCH.z) * 180 / Math.PI;
+  const bench = make(props, { position: { x: BENCH.x, y: by, z: BENCH.z }, rotation: { x: 0, y: benchYaw, z: 0 } });
+  [-0.12, 0.03, 0.18].forEach(z => make(bench, {
+    geometry: { primitive: 'box', width: 1.7, height: 0.05, depth: 0.13 },
+    material: paint('#c5221f'), position: { x: 0, y: 0.47, z },
+  }));
+  [0.66, 0.86].forEach(y => make(bench, {
+    geometry: { primitive: 'box', width: 1.7, height: 0.13, depth: 0.05 },
+    material: paint('#c5221f'), position: { x: 0, y, z: -0.24 }, rotation: '-12 0 0',
+  }));
+  [-0.72, 0.72].forEach(x => {
+    make(bench, { geometry: { primitive: 'box', width: 0.07, height: 0.47, depth: 0.42 },
+      material: paint('#2b2b2b'), position: { x, y: 0.235, z: 0.02 } });
+    make(bench, { geometry: { primitive: 'box', width: 0.06, height: 0.5, depth: 0.06 },
+      material: paint('#2b2b2b'), position: { x, y: 0.72, z: -0.22 }, rotation: '-12 0 0' });
+  });
+  OBSTACLES.push({ x: BENCH.x, z: BENCH.z, r: 0.95 });
+
+  /* ---------- The sundial ----------
+     A stone pillar topped with a brass dial, twelve hour marks, a
+     triangular pointer (gnomon) facing north across the lake, and a
+     shadow line that follows the real time. */
+  const sy = groundHeight(SUNDIAL.x, SUNDIAL.z);
+  const dial = make(props, { position: { x: SUNDIAL.x, y: sy, z: SUNDIAL.z } });
+  make(dial, { geometry: { primitive: 'cylinder', radius: 0.5, height: 0.14, segmentsRadial: 8 },
+    material: paint('#9d978a'), position: '0 0.07 0' });
+  make(dial, { geometry: { primitive: 'cylinder', radius: 0.22, height: 0.85, segmentsRadial: 8 },
+    material: paint('#b8b2a4'), position: '0 0.55 0' });
+  make(dial, { geometry: { primitive: 'cylinder', radius: 0.48, height: 0.06, segmentsRadial: 24 },
+    material: paint('#c49a3c', { metalness: 0.5, roughness: 0.45 }), position: '0 1.0 0' });
+  for (let h = 0; h < 12; h++) {
+    const a = h * Math.PI / 6;
+    make(dial, { geometry: { primitive: 'box', width: 0.025, height: 0.012, depth: 0.08 },
+      material: paint('#4a3a1a'),
+      position: { x: Math.sin(a) * 0.38, y: 1.035, z: -Math.cos(a) * 0.38 },
+      rotation: { x: 0, y: -h * 30, z: 0 } });
+  }
+  make(dial, {
+    geometry: { primitive: 'triangle', vertexA: '0 0 0', vertexB: '0 0 -0.4', vertexC: '0 0.3 0' },
+    material: paint('#7c5c22', { side: 'double', metalness: 0.4 }), position: '0 1.03 0.05',
+  });
+  const shadow = make(dial, { 'sundial-shadow': '', position: '0 1.034 0' });
+  make(shadow, { geometry: { primitive: 'box', width: 0.04, height: 0.004, depth: 0.34 },
+    material: paint('#3b3020', { opacity: 0.75, transparent: true }), position: '0 0 -0.17' });
+  OBSTACLES.push({ x: SUNDIAL.x, z: SUNDIAL.z, r: 0.65 });
+
+  /* ---------- Clouds: puffy groups of flattened white balls ---------- */
+  const clouds = document.getElementById('clouds');
+  for (let i = 0; i < 9; i++) {
+    const a = rand() * Math.PI * 2, d = 60 + rand() * 50;
+    const cloud = make(clouds, { position: { x: Math.cos(a) * d, y: 38 + rand() * 14, z: Math.sin(a) * d } });
+    for (let j = 0; j < 4; j++) {
+      make(cloud, {
+        geometry: { primitive: 'sphere', radius: 4 + rand() * 3, segmentsWidth: 8, segmentsHeight: 6 },
+        material: { color: '#ffffff', roughness: 1, flatShading: true, fog: false },
+        position: { x: j * 5 - 7, y: rand() * 2, z: rand() * 4 - 2 },
+        scale: '1.4 0.55 1',
+      });
+    }
+  }
+
+  placeAtStart();
+}
+
+/* Put the visitor at the starting spot, facing the lake. */
+function placeAtStart() {
+  const rig = document.getElementById('rig');
+  rig.object3D.position.set(START.x, groundHeight(START.x, START.z), START.z);
+  const look = document.getElementById('cam').components['look-controls'];
+  if (look) { look.yawObject.rotation.y = 0; look.pitchObject.rotation.x = 0; }
+}
+
+/* =====================================================================
+   KEYBOARD
+   Keys only move you while the 3D window has focus, so the arrow keys
+   still scroll the page normally everywhere else.
+   ===================================================================== */
+const KEYMAP = {
+  KeyW: 'forward', ArrowUp: 'forward',
+  KeyS: 'back', ArrowDown: 'back',
+  KeyA: 'left', ArrowLeft: 'left',
+  KeyD: 'right', ArrowRight: 'right',
+  KeyQ: 'turnLeft', KeyE: 'turnRight',
+};
+const worldBox = document.getElementById('world');
+
+/* "Engaged" means the visitor is currently using the 3D scene: they
+   clicked or tapped in it, or tabbed into it. In full-screen views the
+   scene can't always hold keyboard focus, so we listen for keys on the
+   whole window and decide here whether they belong to the scene. */
+let sceneEngaged = false;
+function setEngaged(on) {
+  sceneEngaged = on;
+  worldBox.classList.toggle('is-active', on);
+  if (!on) for (const k in held) held[k] = false;
+}
+
+/* Should this key press move the visitor? Yes if the scene is engaged
+   or nothing else on the page has focus, but never while typing in a
+   field or pressing a button (so Space and Enter still work there). */
+function keyBelongsToScene(e) {
+  const t = e.target;
+  if (t && t !== worldBox && t.closest && t.closest('button, input, textarea, select, a, [contenteditable]')) return false;
+  const active = document.activeElement;
+  return sceneEngaged || active === worldBox || active === document.body || active === null;
+}
+
+window.addEventListener('keydown', e => {
+  const move = KEYMAP[e.code];
+  if (!move || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (!keyBelongsToScene(e)) return;
+  e.preventDefault();           // stop the arrow keys from scrolling the page
+  held[move] = true;
+});
+window.addEventListener('keyup', e => {
+  const move = KEYMAP[e.code];
+  if (move) held[move] = false;
+});
+
+// Clicking or tapping inside the scene engages it; clicking elsewhere releases it.
+document.addEventListener('pointerdown', e => {
+  if (worldBox.contains(e.target)) {
+    worldBox.focus({ preventScroll: true });
+    setEngaged(true);
+  } else if (!e.target.closest('.controls')) {
+    setEngaged(false);
+  }
+}, true);
+// Tabbing into the scene engages it; tabbing to anything else releases it.
+worldBox.addEventListener('focus', () => setEngaged(true));
+// (The on-screen movement buttons don't count as "elsewhere".)
+document.addEventListener('focusin', e => {
+  if (e.target !== worldBox && !e.target.closest('.controls')) setEngaged(false);
+});
+// Switching windows or tabs lets go of every key, so you don't keep walking.
+window.addEventListener('blur', () => { for (const k in held) held[k] = false; });
+// Entering or leaving full screen keeps the scene ready for the keyboard.
+document.addEventListener('fullscreenchange', () => { if (document.fullscreenElement) setEngaged(true); });
+
+/* =====================================================================
+   ON-SCREEN BUTTONS
+   Hold a button (finger or mouse) to keep moving. Pressing it with the
+   keyboard (Enter or Space) moves you a short step each press.
+   ===================================================================== */
+document.querySelectorAll('[data-move]').forEach(btn => {
+  const move = btn.dataset.move;
+  const stop = () => { held[move] = false; btn.classList.remove('is-held'); };
+  btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    btn.setPointerCapture?.(e.pointerId);
+    held[move] = true;
+    btn.classList.add('is-held');
+  });
+  btn.addEventListener('pointerup', stop);
+  btn.addEventListener('pointercancel', stop);
+  btn.addEventListener('lostpointercapture', stop);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+  btn.addEventListener('click', e => {
+    if (e.detail !== 0) return;          // real taps are handled above
+    held[move] = true;
+    setTimeout(() => { held[move] = false; }, 300);
+  });
+});
+
+/* "Nudge the birdfeeder" button: pushes it away from wherever you stand. */
+document.getElementById('nudge').addEventListener('click', () => {
+  const feeder = document.getElementById('feeder-pivot');
+  const rig = document.getElementById('rig').object3D.position;
+  if (feeder && feeder.components['swinging-feeder']) {
+    feeder.components['swinging-feeder'].push(FEEDER.x - rig.x || 1, FEEDER.z - rig.z);
+  }
+});
+
+/* "Get in the rowboat" / "Get out at the dock" button: the keyboard and
+   touch-friendly way to do what clicking the boat or the dock does. */
+document.getElementById('boat-btn').addEventListener('click', () => {
+  if (BOAT.aboard) leaveBoat(); else boardBoat();
+});
+
+/* "Back to start" button. If you're in the boat, the boat is tied back
+   up at the dock and you're returned to the meadow. */
+document.getElementById('reset').addEventListener('click', () => {
+  BOAT.aboard = false; BOAT.returning = null; BOAT.rowing = 0;
+  BOAT.x = BOAT.home.x; BOAT.z = BOAT.home.z; BOAT.heading = BOAT.home.heading;
+  setBoatClickable(true);
+  updateBoatButton();
+  placeAtStart();
+  announce('You are back at the start, facing the lake.');
+});
+</script>
+
+</body></html>
