@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<!--
+  Coin Roller - a tiny 3D ball-rolling game
+  ===========================================
+  LIBRARIES USED
+  - Three.js
+      Version: 0.186.1
+      Source:  jsDelivr CDN - https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js
+      Purpose: Draws the 3D scene (floor, ball, coins, lights, camera) using WebGL.
+
+  PRIVACY
+  - Nothing is sent to any server. The only network request is loading Three.js itself.
+
+  VERSION HISTORY
+  // v1.0 - initial build: floor, rolling ball, 3 spinning coins, score,
+  //        win dialog with "Play again", screen reader announcements,
+  //        keyboard + on-screen touch controls, responsive camera.
+  // v1.1 - updated Three.js from 0.160.0 to 0.186.1.
+  // v1.2 - fixed console warnings: THREE.Clock -> THREE.Timer,
+  //        PCFSoftShadowMap -> PCFShadowMap with a soft shadow radius.
+  // v1.3 - added a red block that slides and rocks back and forth;
+  //        touching it ends the game ("Game over" dialog + announcement).
+  // v1.4 - added levels: level 1 has 3 coins and 1 red block, level 2 has
+  //        5 coins and 2 red blocks. Level shown on screen and announced;
+  //        "Next level" button between levels.
+  // v1.5 - added level 3: 9 coins and 3 red blocks. Coin placement now
+  //        squeezes coins a little closer together when the floor is crowded.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Coin Roller</title>
+  <style>
+    /* ---------- Colour tokens ---------- */
+    :root {
+      --bg: #1d2333;
+      --panel: rgba(20, 24, 36, 0.85);
+      --text: #f4f1e8;
+      --gold: #ffc93c;
+      --accent: #4fc3f7;
+      --focus: #ffe58a;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ---------- Top bar: title, level, score, instructions ---------- */
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.25rem 1rem;
+      padding: 0.6rem 1rem;
+      background: var(--panel);
+    }
+    h1 { margin: 0; font-size: clamp(1.1rem, 4vw, 1.6rem); }
+    .score {
+      font-size: clamp(1.1rem, 4vw, 1.5rem);
+      font-weight: 700;
+      color: var(--gold);
+    }
+    .help { margin: 0; width: 100%; font-size: 0.9rem; opacity: 0.85; }
+
+    /* ---------- Game area ---------- */
+    main { position: relative; flex: 1; min-height: 0; }
+    #game {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+    #game:focus-visible { box-shadow: inset 0 0 0 4px var(--focus); }
+
+    /* ---------- On-screen arrow pad (shown on touch screens) ---------- */
+    .dpad {
+      position: absolute;
+      right: 1rem;
+      bottom: calc(1rem + env(safe-area-inset-bottom));
+      display: none;
+      grid-template-columns: repeat(3, 3.4rem);
+      grid-template-rows: repeat(3, 3.4rem);
+      gap: 0.3rem;
+      touch-action: none;
+    }
+    @media (pointer: coarse) { .dpad { display: grid; } }
+    .dpad button {
+      border: 2px solid rgba(255,255,255,0.5);
+      border-radius: 0.8rem;
+      background: rgba(20, 24, 36, 0.7);
+      color: var(--text);
+      font-size: 1.4rem;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .dpad button:active { background: var(--accent); color: #000; }
+    .dpad .up    { grid-column: 2; grid-row: 1; }
+    .dpad .left  { grid-column: 1; grid-row: 2; }
+    .dpad .right { grid-column: 3; grid-row: 2; }
+    .dpad .down  { grid-column: 2; grid-row: 3; }
+
+    /* ---------- End-of-level / game over dialog ---------- */
+    dialog {
+      border: 3px solid var(--gold);
+      border-radius: 1rem;
+      background: #232a3d;
+      color: var(--text);
+      padding: 1.5rem 2rem;
+      text-align: center;
+      max-width: min(90vw, 24rem);
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+    dialog h2 { margin-top: 0; color: var(--gold); }
+
+    .btn {
+      font: inherit;
+      font-size: 1.1rem;
+      font-weight: 700;
+      padding: 0.7rem 1.4rem;
+      border: none;
+      border-radius: 0.6rem;
+      background: var(--gold);
+      color: #1d2333;
+      cursor: pointer;
+    }
+    button:focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+    }
+
+    /* Hidden visually, but still read by screen readers */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .error { padding: 2rem; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Coin Roller</h1>
+    <!-- Visible level and score. aria-hidden because the live region below does the speaking. -->
+    <div class="score" aria-hidden="true">
+      Level <span id="level">1</span> · Score: <span id="score">0</span> / <span id="total">3</span>
+    </div>
+    <p class="help" id="help">
+      Click the game, then roll the ball with the arrow keys or W A S D. Collect all the gold coins and stay away from the red blocks.
+    </p>
+  </header>
+
+  <main>
+    <!-- The 3D canvas goes inside this focusable box -->
+    <div id="game" tabindex="0" role="application"
+         aria-label="Coin Roller game area. Use arrow keys or W A S D to roll the ball. Collect the gold coins and avoid the moving red blocks."
+         aria-describedby="help"></div>
+
+    <!-- Touch controls for phones and tablets -->
+    <div class="dpad" role="group" aria-label="Movement controls">
+      <button class="up"    data-dir="up"    aria-label="Roll up">▲</button>
+      <button class="left"  data-dir="left"  aria-label="Roll left">◀</button>
+      <button class="right" data-dir="right" aria-label="Roll right">▶</button>
+      <button class="down"  data-dir="down"  aria-label="Roll down">▼</button>
+    </div>
+  </main>
+
+  <!-- Screen reader announcer: anything placed in here gets read aloud -->
+  <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Pop-up used for "level complete", "you got them all" and "game over" -->
+  <dialog id="endDialog" aria-labelledby="endTitle" aria-describedby="endText">
+    <h2 id="endTitle">You got them all!</h2>
+    <p id="endText">All coins collected.</p>
+    <button class="btn" id="endButton" type="button">Play again</button>
+  </dialog>
+
+  <noscript><p class="error">This game needs JavaScript turned on.</p></noscript>
+
+  <script type="module">
+    // v1.5 - level 3 added
+
+    /* =========================================================
+       LOAD THREE.JS
+       We load the library inside a try/catch so that if the
+       internet is down or the CDN fails, we show a friendly
+       message instead of a blank screen.
+       ========================================================= */
+    let THREE;
+    try {
+      THREE = await import('https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js');
+    } catch (err) {
+      document.getElementById('game').innerHTML =
+        '<p class="error">Sorry, the 3D library could not load. Check your internet connection and refresh.</p>';
+      throw err;
+    }
+
+    /* =========================================================
+       GAME SETTINGS
+       Numbers you can tweak to change how the game feels.
+       ========================================================= */
+    const FLOOR_SIZE   = 20;               // floor is 20 x 20 units
+    const HALF         = FLOOR_SIZE / 2;   // distance from centre to edge
+    const BALL_RADIUS  = 0.6;
+    const COIN_RADIUS  = 0.5;
+    const ACCELERATION = 28;   // how quickly the ball speeds up when a key is held
+    const MAX_SPEED    = 11;   // top speed
+    const FRICTION     = 1.8;  // how quickly the ball slows down on its own
+    const BOUNCE       = 0.4;  // how much speed is kept when hitting an edge (0 = none)
+
+    // Red block size and wobble (the same for every block)
+    const BLOCK_W      = 3;    // width (left to right)
+    const BLOCK_H      = 1.2;  // height
+    const BLOCK_D      = 1;    // depth (front to back)
+    const BLOCK_RANGE  = HALF - BLOCK_W / 2 - 0.5; // how far it travels from the centre each way
+    const BLOCK_TILT   = 0.12; // how far it rocks, in radians (about 7 degrees)
+
+    /* =========================================================
+       LEVELS
+       Each level says how many coins to collect and lists its
+       red blocks. For each block:
+         z     = which row of the floor it slides along
+                 (negative = back half, positive = front half)
+         speed = how fast it slides
+         start = where in its swing it begins (0 = centre,
+                 Math.PI = centre but heading the other way,
+                 Math.PI / 2 = starts at the right edge)
+       Add another { ... } to this list to make another level!
+       ========================================================= */
+    const LEVELS = [
+      {
+        coins: 3,
+        blocks: [
+          { z: -4, speed: 0.9, start: 0 }
+        ]
+      },
+      {
+        coins: 5,
+        blocks: [
+          { z: -4, speed: 0.9, start: 0 },
+          { z:  4, speed: 1.1, start: Math.PI }
+        ]
+      },
+      {
+        coins: 9,
+        blocks: [
+          { z: -7,   speed: 1.2, start: 0 },             // back row, fastest
+          { z: -3.5, speed: 0.8, start: Math.PI },       // middle row, slowest
+          { z:  4,   speed: 1.0, start: Math.PI / 2 }    // front row, starts at the right edge
+        ]
+      }
+    ];
+
+    // The most coins and blocks any level needs, so we can build them all once
+    const MAX_COINS  = Math.max(...LEVELS.map(l => l.coins));
+    const MAX_BLOCKS = Math.max(...LEVELS.map(l => l.blocks.length));
+
+    // If the person prefers less motion, the coins spin and bob more gently.
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    /* =========================================================
+       GRAB PAGE ELEMENTS
+       ========================================================= */
+    const container  = document.getElementById('game');
+    const levelEl    = document.getElementById('level');
+    const scoreEl    = document.getElementById('score');
+    const totalEl    = document.getElementById('total');
+    const announcer  = document.getElementById('announcer');
+    const endDialog  = document.getElementById('endDialog');
+    const endTitle   = document.getElementById('endTitle');
+    const endText    = document.getElementById('endText');
+    const endButton  = document.getElementById('endButton');
+
+    /* =========================================================
+       RENDERER, SCENE AND CAMERA
+       The renderer draws pictures onto a <canvas>. The scene
+       holds every object. The camera decides what we see.
+       ========================================================= */
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // sharp, but not too heavy on phones
+    renderer.shadowMap.enabled = true;
+    // PCFShadowMap gives smooth-edged shadows (the older "soft" option is deprecated)
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.domElement.setAttribute('aria-hidden', 'true'); // the canvas itself is decorative
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1d2333);
+
+    // A 45-degree "lens". Position is set in fitCamera() so the whole floor always fits.
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+
+    /* =========================================================
+       LIGHTS
+       Soft sky light everywhere, plus a "sun" that casts shadows.
+       ========================================================= */
+    scene.add(new THREE.HemisphereLight(0xdfe9ff, 0x3a3f55, 0.9));
+
+    const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+    sun.position.set(8, 18, 6);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.radius = 4;   // blurs the shadow edges a little so they look soft
+    // The shadow "box" must cover the whole floor
+    Object.assign(sun.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 50 });
+    scene.add(sun);
+
+    /* =========================================================
+       FLOOR
+       A big flat square, a faint grid (so you can see motion),
+       and a low rim around the edge so it looks like a tray.
+       ========================================================= */
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(FLOOR_SIZE, FLOOR_SIZE),
+      new THREE.MeshStandardMaterial({ color: 0x3f8f6b, roughness: 0.9 })
+    );
+    floor.rotation.x = -Math.PI / 2;   // planes start upright; lay it flat
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(FLOOR_SIZE, 10, 0x2e6e51, 0x2e6e51);
+    grid.position.y = 0.01;            // a hair above the floor so it doesn't flicker
+    scene.add(grid);
+
+    // Four thin boxes form the rim
+    const rimMaterial = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
+    const rimHeight = 0.5, rimThick = 0.4;
+    [
+      { x: 0, z: -HALF - rimThick / 2, w: FLOOR_SIZE + rimThick * 2, d: rimThick }, // back
+      { x: 0, z:  HALF + rimThick / 2, w: FLOOR_SIZE + rimThick * 2, d: rimThick }, // front
+      { x: -HALF - rimThick / 2, z: 0, w: rimThick, d: FLOOR_SIZE },                // left
+      { x:  HALF + rimThick / 2, z: 0, w: rimThick, d: FLOOR_SIZE }                 // right
+    ].forEach(r => {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(r.w, rimHeight, r.d), rimMaterial);
+      wall.position.set(r.x, rimHeight / 2, r.z);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      scene.add(wall);
+    });
+
+    /* =========================================================
+       BALL
+       We paint stripes onto a small in-memory canvas and wrap it
+       around the sphere, so you can actually see it rolling.
+       ========================================================= */
+    function makeStripeTexture() {
+      const c = document.createElement('canvas');
+      c.width = 128; c.height = 64;
+      const ctx = c.getContext('2d');
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = i % 2 ? '#ffffff' : '#e53950';
+        ctx.fillRect(i * 16, 0, 16, 64);
+      }
+      return new THREE.CanvasTexture(c);
+    }
+
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(BALL_RADIUS, 32, 24),
+      new THREE.MeshStandardMaterial({ map: makeStripeTexture(), roughness: 0.4 })
+    );
+    ball.castShadow = true;
+    scene.add(ball);
+
+    // The ball's speed in each direction (x = left/right, z = up/down on screen)
+    const velocity = new THREE.Vector2(0, 0);
+
+    /* =========================================================
+       COINS
+       Flat gold cylinders standing on their edge. We build
+       enough for the biggest level; levels that need fewer
+       simply hide the extras.
+       ========================================================= */
+    const coinGeometry = new THREE.CylinderGeometry(COIN_RADIUS, COIN_RADIUS, 0.12, 40);
+    coinGeometry.rotateX(Math.PI / 2); // turn it so the face looks at us, like a standing coin
+    const coinMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffc93c, metalness: 0.7, roughness: 0.25, emissive: 0x4a3200
+    });
+
+    const coins = [];
+    for (let i = 0; i < MAX_COINS; i++) {
+      const mesh = new THREE.Mesh(coinGeometry, coinMaterial);
+      mesh.castShadow = true;
+      mesh.visible = false;
+      scene.add(mesh);
+      coins.push({ mesh, active: false, collected: false, shrink: 0, phase: Math.random() * Math.PI * 2 });
+    }
+
+    /* =========================================================
+       RED BLOCKS (the danger)
+       Red boxes that slide from side to side along one row of
+       the floor, rocking as they go. Touch one and the game ends.
+       Like the coins, we build the most any level needs and
+       hide the ones a level doesn't use.
+       ========================================================= */
+    const blockGeometry = new THREE.BoxGeometry(BLOCK_W, BLOCK_H, BLOCK_D);
+    const blockMaterial = new THREE.MeshStandardMaterial({ color: 0xd62828, roughness: 0.5 });
+
+    const blocks = [];
+    for (let i = 0; i < MAX_BLOCKS; i++) {
+      const mesh = new THREE.Mesh(blockGeometry, blockMaterial);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.visible = false;
+      scene.add(mesh);
+      blocks.push({ mesh, active: false, z: 0, speed: 1, start: 0 });
+    }
+
+    // The blocks' shared clock. It only ticks while a level is being played,
+    // so the blocks freeze in place when a level ends.
+    let blockTime = 0;
+
+    // Moves and tilts every active block for the current moment in time
+    function moveBlocks() {
+      blocks.forEach(b => {
+        if (!b.active) return;
+        const swing = blockTime * b.speed + b.start;
+        const x = Math.sin(swing) * BLOCK_RANGE;
+        // Rock a little faster than it slides, like a wobbling toy
+        const tilt = Math.sin(swing * 3) * BLOCK_TILT;
+        // Raise it just enough that the lower corner rests on the floor instead of sinking in
+        const y = (BLOCK_W / 2) * Math.abs(Math.sin(tilt)) + (BLOCK_H / 2) * Math.cos(tilt);
+        b.mesh.position.set(x, y, b.z);
+        b.mesh.rotation.z = tilt;
+      });
+    }
+
+    // Is the ball touching any block? For each one we find the spot on the
+    // block's footprint closest to the ball, and check if it's within the ball's radius.
+    function ballHitsBlock() {
+      return blocks.some(b => {
+        if (!b.active) return false;
+        const bx = b.mesh.position.x;
+        const nearestX = THREE.MathUtils.clamp(ball.position.x, bx - BLOCK_W / 2, bx + BLOCK_W / 2);
+        const nearestZ = THREE.MathUtils.clamp(ball.position.z, b.z - BLOCK_D / 2, b.z + BLOCK_D / 2);
+        return Math.hypot(ball.position.x - nearestX, ball.position.z - nearestZ) < BALL_RADIUS;
+      });
+    }
+
+    /* =========================================================
+       PLACE COINS
+       Pick random spots for this level's coins: not too close to
+       the ball's start, not in any red block's path, not too
+       close to each other, and not touching the rim.
+       ========================================================= */
+    function placeCoins(count, blockRows) {
+      const limit = HALF - 1.5;
+      const spots = [];
+      coins.forEach((coin, i) => {
+        coin.active = i < count;
+        coin.collected = false;
+        coin.shrink = 0;
+        coin.mesh.scale.setScalar(1);
+        coin.mesh.visible = coin.active;
+        if (!coin.active) return;
+
+        // Is this spot a good place for a coin, if coins must be at least `gap` apart?
+        const isGoodSpot = (x, z, gap) =>
+          Math.hypot(x, z) >= 3 &&                                // away from the ball's start
+          blockRows.every(row => Math.abs(z - row) >= 1.2) &&     // out of the blocks' paths
+          spots.every(s => Math.hypot(s.x - x, s.z - z) >= gap);  // away from other coins
+
+        // Try random spots. If the floor is crowded (lots of coins and blocks),
+        // gradually allow coins to sit a little closer together until one fits.
+        let x = 0, z = 0, found = false;
+        for (let gap = 3.5; gap >= 1.5 && !found; gap -= 0.5) {
+          for (let tries = 0; tries < 300 && !found; tries++) {
+            x = (Math.random() * 2 - 1) * limit;
+            z = (Math.random() * 2 - 1) * limit;
+            found = isGoodSpot(x, z, gap);
+          }
+        }
+        spots.push({ x, z });
+        coin.mesh.position.set(x, 1, z);
+      });
+    }
+
+    /* =========================================================
+       SCORE AND SCREEN READER ANNOUNCEMENTS
+       The announcer is emptied first and refilled a moment later.
+       That little gap makes screen readers notice the change
+       even if the words are similar to last time.
+       ========================================================= */
+    let levelIndex = 0;   // 0 = level 1, 1 = level 2, ...
+    let score = 0;
+    let gameOver = false; // true whenever a level isn't being played (won, lost, or between levels)
+
+    function announce(message) {
+      announcer.textContent = '';
+      setTimeout(() => { announcer.textContent = message; }, 60);
+    }
+
+    // How many coins the current level needs
+    function coinsNeeded() { return LEVELS[levelIndex].coins; }
+
+    function setScore(value, extraMessage = '') {
+      score = value;
+      scoreEl.textContent = score;
+      announce(`Score: ${score} of ${coinsNeeded()}. ${extraMessage}`.trim());
+    }
+
+    /* =========================================================
+       START A LEVEL
+       Put the ball back in the middle, set up this level's coins
+       and blocks, reset the score, and update the top bar.
+       ========================================================= */
+    function startLevel(index, message) {
+      levelIndex = index;
+      const level = LEVELS[levelIndex];
+
+      ball.position.set(0, BALL_RADIUS, 0);
+      ball.quaternion.identity();
+      velocity.set(0, 0);
+      pressed.clear();
+
+      // Switch on the blocks this level uses, switch off the rest
+      blocks.forEach((b, i) => {
+        const setup = level.blocks[i];
+        b.active = Boolean(setup);
+        b.mesh.visible = b.active;
+        if (setup) Object.assign(b, setup);
+      });
+      blockTime = 0;
+      moveBlocks();
+
+      placeCoins(level.coins, level.blocks.map(b => b.z));
+
+      score = 0;
+      levelEl.textContent = levelIndex + 1;
+      scoreEl.textContent = '0';
+      totalEl.textContent = level.coins;
+      gameOver = false;
+
+      if (message) announce(message);
+    }
+
+    // Describes a level in words, e.g. "Level 2. Collect 5 coins and avoid 2 red blocks."
+    function describeLevel(index) {
+      const l = LEVELS[index];
+      const n = l.blocks.length;
+      return `Level ${index + 1}. Collect ${l.coins} coins and avoid ${n} red ${n === 1 ? 'block' : 'blocks'}.`;
+    }
+
+    /* =========================================================
+       END-OF-LEVEL POP-UP
+       One dialog does three jobs. We remember what its button
+       should do next: go to the next level, or start over.
+       ========================================================= */
+    let nextAction = 'restart';
+
+    function showEndDialog(title, message, buttonLabel, action) {
+      endTitle.textContent = title;
+      endText.textContent = message;
+      endButton.textContent = buttonLabel;
+      nextAction = action;
+      endDialog.showModal(); // the dialog moves focus to the button automatically
+    }
+
+    // All coins in this level collected
+    function levelComplete() {
+      gameOver = true;
+      velocity.set(0, 0);
+      pressed.clear();
+      const isLastLevel = levelIndex === LEVELS.length - 1;
+      if (isLastLevel) {
+        showEndDialog('You got them all!',
+          `You finished all ${LEVELS.length} levels.`, 'Play again', 'restart');
+      } else {
+        showEndDialog(`Level ${levelIndex + 1} complete!`,
+          describeLevel(levelIndex + 1), 'Next level', 'next');
+      }
+    }
+
+    // Called when the ball touches a red block
+    function loseGame() {
+      gameOver = true;
+      velocity.set(0, 0);
+      pressed.clear();
+      announce(`Game over! The red block got you. Score: ${score} of ${coinsNeeded()}.`);
+      // A short pause so you can see what happened before the pop-up appears
+      setTimeout(() => showEndDialog('Game over!',
+        `The red block got you on level ${levelIndex + 1}. You collected ${score} of ${coinsNeeded()} coins.`,
+        'Play again', 'restart'), 600);
+    }
+
+    // What the pop-up's button does
+    endButton.addEventListener('click', () => {
+      endDialog.close();
+      if (nextAction === 'next') {
+        startLevel(levelIndex + 1, `${describeLevel(levelIndex + 1)} Score: 0 of ${LEVELS[levelIndex + 1].coins}.`);
+      } else {
+        startLevel(0, `New game. ${describeLevel(0)} Score: 0 of ${LEVELS[0].coins}.`);
+      }
+      container.focus();   // send the keyboard back to the game
+    });
+
+    // Pressing Escape on the dialog does the same as the button instead of leaving it stuck
+    endDialog.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      endButton.click();
+    });
+
+    /* =========================================================
+       KEYBOARD INPUT
+       We keep a list of which directions are currently held down.
+       ========================================================= */
+    const pressed = new Set();
+    const keyToDir = {
+      ArrowUp: 'up', KeyW: 'up',
+      ArrowDown: 'down', KeyS: 'down',
+      ArrowLeft: 'left', KeyA: 'left',
+      ArrowRight: 'right', KeyD: 'right'
+    };
+
+    window.addEventListener('keydown', (e) => {
+      const dir = keyToDir[e.code];
+      if (!dir || gameOver) return;
+      // Only steal arrow keys when the user isn't typing or using a button
+      if (e.target.closest && e.target.closest('dialog, input, textarea')) return;
+      e.preventDefault();            // stop arrows from scrolling the page
+      pressed.add(dir);
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const dir = keyToDir[e.code];
+      if (dir) pressed.delete(dir);
+    });
+
+    // If the window loses focus, let go of all keys so the ball doesn't run away
+    window.addEventListener('blur', () => pressed.clear());
+
+    // Clicking/tapping the game gives it keyboard focus
+    container.addEventListener('pointerdown', () => container.focus());
+
+    /* =========================================================
+       TOUCH / MOUSE ARROW PAD
+       Holding a button acts like holding the arrow key.
+       Pressing it with Enter/Space gives a short push instead.
+       ========================================================= */
+    document.querySelectorAll('.dpad button').forEach(btn => {
+      const dir = btn.dataset.dir;
+      const release = () => pressed.delete(dir);
+
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (!gameOver) pressed.add(dir);
+        btn.setPointerCapture(e.pointerId);
+      });
+      btn.addEventListener('pointerup', release);
+      btn.addEventListener('pointercancel', release);
+      btn.addEventListener('lostpointercapture', release);
+
+      // Keyboard "click" (detail is 0 when activated by keyboard)
+      btn.addEventListener('click', (e) => {
+        if (e.detail !== 0 || gameOver) return;
+        const push = 4;
+        if (dir === 'up')    velocity.y -= push;
+        if (dir === 'down')  velocity.y += push;
+        if (dir === 'left')  velocity.x -= push;
+        if (dir === 'right') velocity.x += push;
+      });
+    });
+
+    /* =========================================================
+       FIT CAMERA TO SCREEN
+       Works out how far back the camera must sit so the whole
+       floor is visible, whether the screen is wide or tall.
+       ========================================================= */
+    function fitCamera() {
+      const w = container.clientWidth;
+      const h = container.clientHeight || 1;
+      const aspect = w / h;
+
+      renderer.setSize(w, h, false);
+      camera.aspect = aspect;
+
+      const tanHalfV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+      const tanHalfH = tanHalfV * aspect;
+
+      // Distance needed to fit the floor's width, and its (tilted) depth
+      const needForWidth = (HALF + 1.5) / tanHalfH;
+      const needForDepth = (HALF - 0.5) / tanHalfV;
+      const distance = Math.max(needForWidth, needForDepth);
+
+      // Look down from above and slightly in front (about 50 degrees)
+      const direction = new THREE.Vector3(0, 0.77, 0.64).normalize();
+      camera.position.copy(direction.multiplyScalar(distance));
+      camera.lookAt(0, 0, 0.6);
+      camera.updateProjectionMatrix();
+    }
+
+    window.addEventListener('resize', fitCamera);
+    new ResizeObserver(fitCamera).observe(container); // also catches the header wrapping
+
+    /* =========================================================
+       MAIN GAME LOOP
+       Runs about 60 times a second: move the ball, keep it on
+       the floor, move the blocks, spin the coins, check for
+       pickups and crashes, then draw.
+       ========================================================= */
+    // The Timer measures how much time passes between frames.
+    // connect(document) pauses it while the tab is hidden, so the ball
+    // doesn't jump when you come back.
+    const timer = new THREE.Timer();
+    timer.connect(document);
+    const rollAxis = new THREE.Vector3();
+    const rollTurn = new THREE.Quaternion();
+
+    function update(timestamp) {
+      // Tell the timer the current time, then ask how long the last frame took.
+      // The frame time is capped so a slow frame doesn't cause a huge jump.
+      timer.update(timestamp);
+      const dt = Math.min(timer.getDelta(), 0.05);
+      const time = timer.getElapsed();
+
+      /* ----- 1. Turn held keys into a push direction ----- */
+      let ax = 0, az = 0;
+      if (pressed.has('left'))  ax -= 1;
+      if (pressed.has('right')) ax += 1;
+      if (pressed.has('up'))    az -= 1;   // "up" on screen means away from the camera
+      if (pressed.has('down'))  az += 1;
+      if (ax && az) { ax *= Math.SQRT1_2; az *= Math.SQRT1_2; } // diagonals aren't faster
+
+      /* ----- 2. Speed up, then let friction slow it down ----- */
+      velocity.x += ax * ACCELERATION * dt;
+      velocity.y += az * ACCELERATION * dt;
+      velocity.multiplyScalar(Math.exp(-FRICTION * dt));
+      if (velocity.length() > MAX_SPEED) velocity.setLength(MAX_SPEED);
+
+      /* ----- 3. Move the ball ----- */
+      const oldX = ball.position.x, oldZ = ball.position.z;
+      ball.position.x += velocity.x * dt;
+      ball.position.z += velocity.y * dt;
+
+      /* ----- 4. Keep it on the floor: stop at the edge and bounce back a little ----- */
+      const limit = HALF - BALL_RADIUS;
+      if (ball.position.x >  limit) { ball.position.x =  limit; velocity.x = -velocity.x * BOUNCE; }
+      if (ball.position.x < -limit) { ball.position.x = -limit; velocity.x = -velocity.x * BOUNCE; }
+      if (ball.position.z >  limit) { ball.position.z =  limit; velocity.y = -velocity.y * BOUNCE; }
+      if (ball.position.z < -limit) { ball.position.z = -limit; velocity.y = -velocity.y * BOUNCE; }
+
+      /* ----- 5. Spin the ball to match how far it travelled (looks like real rolling) ----- */
+      const dx = ball.position.x - oldX;
+      const dz = ball.position.z - oldZ;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.0001) {
+        // The ball turns around a line that's sideways to the direction it moves
+        rollAxis.set(dz, 0, -dx).normalize();
+        rollTurn.setFromAxisAngle(rollAxis, dist / BALL_RADIUS);
+        ball.quaternion.premultiply(rollTurn);
+      }
+
+      /* ----- 6. Move the red blocks, and end the game if the ball touches one ----- */
+      if (!gameOver) blockTime += dt;
+      moveBlocks();
+      if (!gameOver && ballHitsBlock()) loseGame();
+
+      /* ----- 7. Animate coins and check if the ball touched one ----- */
+      const spinSpeed = reduceMotion ? 0.8 : 2.5;
+      const bobHeight = reduceMotion ? 0.05 : 0.2;
+
+      coins.forEach(coin => {
+        const m = coin.mesh;
+        if (!coin.active || !m.visible) return;
+
+        m.rotation.y += spinSpeed * dt;
+
+        if (coin.collected) {
+          // Shrink and float upward, then disappear
+          coin.shrink += dt * 4;
+          m.scale.setScalar(Math.max(0, 1 - coin.shrink));
+          m.position.y += dt * 3;
+          if (coin.shrink >= 1) m.visible = false;
+          return;
+        }
+
+        m.position.y = 1 + Math.sin(time * 2 + coin.phase) * bobHeight;
+
+        // Touching? Compare flat distance between ball and coin centres
+        const gap = Math.hypot(ball.position.x - m.position.x, ball.position.z - m.position.z);
+        if (!gameOver && gap < BALL_RADIUS + COIN_RADIUS) {
+          coin.collected = true;
+          const newScore = score + 1;
+          if (newScore >= coinsNeeded()) {
+            const isLastLevel = levelIndex === LEVELS.length - 1;
+            setScore(newScore, isLastLevel ? 'You got them all!' : `Level ${levelIndex + 1} complete!`);
+            gameOver = true;
+            setTimeout(levelComplete, 500);   // short pause so the last coin animation is seen
+          } else {
+            setScore(newScore);
+          }
+        }
+      });
+
+      /* ----- 8. Draw the frame ----- */
+      renderer.render(scene, camera);
+    }
+
+    /* =========================================================
+       GO!
+       ========================================================= */
+    startLevel(0);
+    fitCamera();
+    renderer.setAnimationLoop(update);
+  </script>
+</body>
+</html>
