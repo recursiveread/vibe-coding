@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<!--
+  GOOGLY EYES MIRROR
+  ==================
+  Version history:
+    v1.0 - 2026-10-15 - initial build: start/stop camera, mirrored video,
+                        MediaPipe face tracking, wobbly googly eyes,
+                        "Looking for a face..." message
+    v1.1 - 2026-10-15 - googly eyelids open and close with your real eyes;
+                        red top hat that follows and tilts with your head
+
+  Libraries used (loaded only when you press "Start camera"):
+    1. MediaPipe Tasks Vision
+       - Version: 0.10.21
+       - Source:  jsDelivr CDN - https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/
+       - Purpose: Google's face-finding library. Its "Face Landmarker" finds
+                  478 points on your face (eyes, nose, mouth, etc.).
+    2. Face Landmarker model file (face_landmarker.task, float16, version 1)
+       - Source:  Google's official storage -
+                  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+       - Purpose: The trained "brain" the library uses to recognise faces.
+
+  Privacy: the library and model are DOWNLOADED to your browser, but your
+  camera video never leaves your device. All face tracking happens locally.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Googly Eyes Mirror</title>
+  <style>
+    /* ---------- Colours and basic page setup ---------- */
+    :root {
+      --bg: #fdf6e3;
+      --ink: #2b2b2b;
+      --accent: #e85d3f;
+      --accent-dark: #b8432a;
+      --panel: #ffffff;
+      --focus: #1a73e8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #1d1b19; --ink: #f2ede4; --panel: #2a2724; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+    }
+    header { text-align: center; margin-bottom: 12px; }
+    h1 { margin: 0.2em 0; font-size: clamp(1.6rem, 5vw, 2.6rem); }
+    header p { margin: 0; opacity: 0.8; }
+
+    main { width: 100%; max-width: 900px; }
+
+    /* ---------- Buttons ---------- */
+    .controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    button {
+      font: inherit;
+      font-weight: 700;
+      font-size: 1.05rem;
+      padding: 12px 24px;
+      min-height: 48px;           /* big enough to tap on phones */
+      border-radius: 999px;
+      border: 3px solid var(--accent-dark);
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: var(--accent-dark); }
+    button:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #stopBtn { background: var(--panel); color: var(--ink); }
+
+    /* ---------- The "stage" holding the video and the drawing layer ---------- */
+    .stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #000;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+    }
+    /* Video and canvas sit exactly on top of each other.
+       scaleX(-1) flips them sideways so it acts like a mirror. */
+    .stage video, .stage canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .stage video { display: block; }
+
+    /* Message bubble shown over the video ("Looking for a face..." etc.) */
+    #status {
+      position: absolute;
+      left: 50%;
+      bottom: 16px;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.7);
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: clamp(0.95rem, 3vw, 1.15rem);
+      text-align: center;
+      max-width: calc(100% - 32px);
+    }
+    #status:empty { display: none; }
+
+    footer { margin-top: 14px; font-size: 0.9rem; opacity: 0.75; text-align: center; }
+
+    /* Visually hidden text for screen readers only */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Googly Eyes Mirror</h1>
+    <p>Press "Start camera", then shake your head!</p>
+  </header>
+
+  <main>
+    <!-- Start / Stop buttons -->
+    <div class="controls" role="group" aria-label="Camera controls">
+      <button id="startBtn" type="button" aria-describedby="privacyNote">Start camera</button>
+      <button id="stopBtn" type="button" disabled>Stop camera</button>
+    </div>
+
+    <!-- The mirror: live video with googly eyes drawn on top -->
+    <section class="stage" aria-label="Camera mirror with googly eyes">
+      <video id="video" playsinline muted aria-hidden="true"></video>
+      <canvas id="canvas" role="img"
+              aria-label="Your mirrored camera image with two blinking googly eyes over your eyes and a red top hat on your head"></canvas>
+      <!-- aria-live means screen readers announce changes to this message -->
+      <p id="status" role="status" aria-live="polite">Camera is off.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p id="privacyNote">Your camera video stays on your device. Nothing is uploaded.</p>
+  </footer>
+
+  <script type="module">
+    // v1.0 - initial build
+    // v1.1 - blinking eyelids and a red top hat
+
+    /* =========================================================
+       SETTINGS
+       Exact library version and model location, kept in one place.
+       ========================================================= */
+    const MEDIAPIPE_VERSION = "0.10.21";
+    const MEDIAPIPE_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}`;
+    const MODEL_URL =
+      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+
+    /* =========================================================
+       FACE POINT NUMBERS
+       MediaPipe numbers every point on the face. These are the
+       corners of each eye, plus the far left and right edges of
+       the face (used to measure how big the face is).
+       ========================================================= */
+    // "upper" and "lower" are the middle of the top and bottom eyelid.
+    // The gap between them tells us how open each eye is.
+    const EYES = [
+      { outer: 33,  inner: 133, upper: 159, lower: 145 },   // one eye
+      { outer: 263, inner: 362, upper: 386, lower: 374 }    // the other eye
+    ];
+    const FACE_EDGE_A = 234;
+    const FACE_EDGE_B = 454;
+    const FOREHEAD_TOP = 10;   // top middle of the forehead (where the hat sits)
+    const CHIN = 152;          // bottom of the chin (used to measure face height)
+
+    /* =========================================================
+       BLINK SETTINGS
+       We compare eyelid gap to eye width. Below CLOSED the
+       googly eye is fully shut; above OPEN it's fully open.
+       If blinking doesn't trigger well for you, nudge these.
+       ========================================================= */
+    const EYE_CLOSED_RATIO = 0.12;
+    const EYE_OPEN_RATIO   = 0.24;
+    const LID_SPEED        = 0.6;   // 0..1, how quickly the googly lid follows your lid
+
+    /* =========================================================
+       PHYSICS SETTINGS for the wobbly pupils.
+       Values are multiplied by the eye size, so the wobble feels
+       the same whether your face is near or far.
+       ========================================================= */
+    const GRAVITY       = 30;    // how strongly the pupil falls downward
+    const BOUNCINESS    = 0.55;  // 0 = no bounce off the eye's edge, 1 = super bouncy
+    const AIR_DRAG      = 1.2;   // slows the pupil gently over time
+    const SHAKE_POWER   = 1.0;   // how much head movement flings the pupil
+    const PUPIL_SIZE    = 0.48;  // pupil radius compared to the white eye radius
+    const SMOOTHING     = 0.55;  // 0..1, higher = follow the face more tightly
+
+    /* =========================================================
+       GRAB THE PAGE ELEMENTS we need to work with
+       ========================================================= */
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn  = document.getElementById("stopBtn");
+    const video    = document.getElementById("video");
+    const canvas   = document.getElementById("canvas");
+    const ctx      = canvas.getContext("2d");
+    const statusEl = document.getElementById("status");
+
+    /* =========================================================
+       THINGS WE REMEMBER WHILE RUNNING
+       ========================================================= */
+    let faceLandmarker = null;   // the MediaPipe face finder (loaded once)
+    let stream = null;           // the live camera feed
+    let animationId = null;      // id of the drawing loop, so we can stop it
+    let lastVideoTime = -1;      // avoids checking the same video frame twice
+    let lastFrameTime = 0;       // used to measure time between frames
+    let faceVisible = false;     // did we see a face in the latest frame?
+
+    // One "eye state" for each googly eye: where it is, how fast it moves,
+    // and where its pupil is inside it.
+    function makeEyeState() {
+      return {
+        ready: false,            // false until we've seen this eye once
+        x: 0, y: 0,              // centre of the white eye (canvas pixels)
+        vx: 0, vy: 0,            // how fast the eye itself is moving
+        ax: 0, ay: 0,            // how fast that speed is changing (acceleration)
+        r: 0,                    // radius of the white eye
+        px: 0, py: 0,            // pupil offset from the eye centre
+        pvx: 0, pvy: 0,          // pupil speed
+        open: 1,                 // 1 = wide open, 0 = shut
+        angle: 0                 // head tilt, so the eyelid tilts with you
+      };
+    }
+    let eyeStates = [makeEyeState(), makeEyeState()];
+
+    // Where the hat goes: position, size and tilt (smoothed like the eyes)
+    let hat = { ready: false, x: 0, y: 0, width: 0, angle: 0 };
+
+    /* =========================================================
+       SHOW A MESSAGE in the bubble (and to screen readers).
+       Only updates when the text actually changes, so screen
+       readers aren't flooded with repeats.
+       ========================================================= */
+    function setStatus(text) {
+      if (statusEl.textContent !== text) statusEl.textContent = text;
+    }
+
+    /* =========================================================
+       LOAD MEDIAPIPE (only the first time Start is pressed).
+       Tries the faster graphics-card mode first, and falls back
+       to the regular processor if that doesn't work.
+       ========================================================= */
+    async function loadFaceLandmarker() {
+      if (faceLandmarker) return faceLandmarker;
+      setStatus("Loading face finder...");
+
+      // Bring in the library code from the CDN
+      const { FaceLandmarker, FilesetResolver } =
+        await import(`${MEDIAPIPE_URL}/vision_bundle.mjs`);
+
+      // Tell MediaPipe where its helper (WebAssembly) files live
+      const fileset = await FilesetResolver.forVisionTasks(`${MEDIAPIPE_URL}/wasm`);
+
+      const options = (delegate) => ({
+        baseOptions: { modelAssetPath: MODEL_URL, delegate },
+        runningMode: "VIDEO",   // we feed it a stream of video frames
+        numFaces: 1             // only track one face
+      });
+
+      try {
+        faceLandmarker = await FaceLandmarker.createFromOptions(fileset, options("GPU"));
+      } catch (err) {
+        console.warn("GPU mode failed, using CPU instead:", err);
+        faceLandmarker = await FaceLandmarker.createFromOptions(fileset, options("CPU"));
+      }
+      return faceLandmarker;
+    }
+
+    /* =========================================================
+       START THE CAMERA
+       Asks permission, shows the video, then starts the loop
+       that finds your face and draws the eyes.
+       ========================================================= */
+    async function startCamera() {
+      startBtn.disabled = true;
+      try {
+        // Check that this browser can use a camera at all
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("This browser can't use the camera (it may need https).");
+        }
+
+        await loadFaceLandmarker();
+
+        setStatus("Asking for camera permission...");
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+
+        // Make the drawing layer the same size as the real video picture,
+        // and make the stage the same shape as the video.
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        document.querySelector(".stage").style.aspectRatio =
+          `${video.videoWidth} / ${video.videoHeight}`;
+
+        // Fresh start for the eyes
+        eyeStates = [makeEyeState(), makeEyeState()];
+        hat.ready = false;
+        lastVideoTime = -1;
+        lastFrameTime = performance.now();
+
+        stopBtn.disabled = false;
+        stopBtn.focus();   // move keyboard focus to the button you'll need next
+        setStatus("Looking for a face...");
+        animationId = requestAnimationFrame(loop);
+      } catch (err) {
+        console.error(err);
+        const denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+        setStatus(denied
+          ? "Camera permission was blocked. Allow it in your browser settings and try again."
+          : "Sorry, something went wrong: " + (err.message || err));
+        stopCamera(false);
+      }
+    }
+
+    /* =========================================================
+       STOP THE CAMERA
+       Turns off the camera light, stops the loop, clears the eyes.
+       ========================================================= */
+    function stopCamera(updateMessage = true) {
+      if (animationId) cancelAnimationFrame(animationId);
+      animationId = null;
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());  // camera fully off
+        stream = null;
+      }
+      video.srcObject = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      if (updateMessage) {
+        setStatus("Camera is off.");
+        startBtn.focus();
+      }
+    }
+
+    /* =========================================================
+       THE MAIN LOOP - runs about 60 times a second.
+       1. Ask MediaPipe where the face is (on each new video frame)
+       2. Move the googly eyes and wobble the pupils
+       3. Draw everything
+       ========================================================= */
+    function loop(now) {
+      // Time since the last loop, in seconds (capped so a pause doesn't
+      // make the pupils fly off wildly)
+      const dt = Math.min((now - lastFrameTime) / 1000, 0.05);
+      lastFrameTime = now;
+
+      // --- 1. Find the face, but only when the video shows a new frame ---
+      if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+        lastVideoTime = video.currentTime;
+        const result = faceLandmarker.detectForVideo(video, now);
+        const face = result.faceLandmarks && result.faceLandmarks[0];
+
+        if (face) {
+          if (!faceVisible) setStatus("");      // hide the message
+          faceVisible = true;
+          updateEyeTargets(face, dt);
+        } else {
+          if (faceVisible || statusEl.textContent === "") setStatus("Looking for a face...");
+          faceVisible = false;
+          // Forget the old positions so eyes don't "jump" when the face returns
+          eyeStates.forEach((e) => (e.ready = false));
+          hat.ready = false;
+        }
+      }
+
+      // --- 2. Wobble the pupils ---
+      if (faceVisible) eyeStates.forEach((e) => updatePupil(e, dt));
+
+      // --- 3. Draw ---
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (faceVisible) {
+        drawHat();
+        eyeStates.forEach(drawGooglyEye);
+      }
+
+      animationId = requestAnimationFrame(loop);
+    }
+
+    /* =========================================================
+       WORK OUT WHERE EACH GOOGLY EYE SHOULD BE
+       MediaPipe gives points as fractions (0 to 1) of the picture,
+       so we multiply by the canvas size to get pixels.
+       We also track how fast each eye is speeding up, because
+       that's what makes real googly eye pupils swing.
+       ========================================================= */
+    function updateEyeTargets(face, dt) {
+      const W = canvas.width, H = canvas.height;
+      const pt = (i) => ({ x: face[i].x * W, y: face[i].y * H });
+
+      // Face width, used to size the eyes
+      const a = pt(FACE_EDGE_A), b = pt(FACE_EDGE_B);
+      const faceWidth = Math.hypot(a.x - b.x, a.y - b.y);
+
+      // Head tilt: the angle of the line running from one eye to the other
+      const eyeA = pt(EYES[0].outer), eyeB = pt(EYES[1].outer);
+      const tilt = Math.atan2(eyeB.y - eyeA.y, eyeB.x - eyeA.x);
+
+      updateHat(pt, faceWidth, tilt);
+
+      EYES.forEach((ids, i) => {
+        const outer = pt(ids.outer), inner = pt(ids.inner);
+        // The eye's centre is halfway between its two corners
+        const tx = (outer.x + inner.x) / 2;
+        const ty = (outer.y + inner.y) / 2;
+        // Big googly eye: about 21% of the face width
+        const tr = faceWidth * 0.21;
+
+        // How open is the real eye? Eyelid gap divided by eye width,
+        // then turned into a 0 (shut) to 1 (open) number.
+        const upper = pt(ids.upper), lower = pt(ids.lower);
+        const lidGap   = Math.hypot(upper.x - lower.x, upper.y - lower.y);
+        const eyeWidth = Math.hypot(outer.x - inner.x, outer.y - inner.y);
+        const ratio = lidGap / Math.max(eyeWidth, 1);
+        const targetOpen = Math.min(1, Math.max(0,
+          (ratio - EYE_CLOSED_RATIO) / (EYE_OPEN_RATIO - EYE_CLOSED_RATIO)));
+
+        const e = eyeStates[i];
+        if (!e.ready) {
+          // First sighting: jump straight there, pupil hanging at the bottom
+          Object.assign(e, makeEyeState(), {
+            ready: true, x: tx, y: ty, r: tr,
+            py: tr * (1 - PUPIL_SIZE) * 0.9,
+            open: targetOpen, angle: tilt
+          });
+          return;
+        }
+
+        // Ease the eyelid and tilt toward their new values
+        e.open  += (targetOpen - e.open) * LID_SPEED;
+        e.angle += (tilt - e.angle) * SMOOTHING;
+
+        // Glide smoothly toward the new spot (removes jitter)
+        const nx = e.x + (tx - e.x) * SMOOTHING;
+        const ny = e.y + (ty - e.y) * SMOOTHING;
+        e.r += (tr - e.r) * SMOOTHING;
+
+        // Speed of the eye = distance moved / time
+        const safeDt = Math.max(dt, 1 / 120);
+        const nvx = (nx - e.x) / safeDt;
+        const nvy = (ny - e.y) / safeDt;
+
+        // Acceleration = change in speed / time (softened a bit, because
+        // camera tracking is a little shaky)
+        const rawAx = (nvx - e.vx) / safeDt;
+        const rawAy = (nvy - e.vy) / safeDt;
+        e.ax = e.ax * 0.5 + rawAx * 0.5;
+        e.ay = e.ay * 0.5 + rawAy * 0.5;
+
+        e.x = nx; e.y = ny; e.vx = nvx; e.vy = nvy;
+      });
+    }
+
+    /* =========================================================
+       WORK OUT WHERE THE HAT SHOULD GO
+       The hat sits on the top of the forehead, pushed a little
+       further "up" along the direction your head is pointing,
+       so it stays on even when you tilt your head.
+       ========================================================= */
+    function updateHat(pt, faceWidth, tilt) {
+      const top  = pt(FOREHEAD_TOP);
+      const chin = pt(CHIN);
+      const faceHeight = Math.hypot(top.x - chin.x, top.y - chin.y);
+
+      // "Up" for your head: straight up, rotated by how much you tilt
+      const upX = Math.sin(tilt);
+      const upY = -Math.cos(tilt);
+      const lift = faceHeight * 0.12;   // raise the brim above the forehead point
+
+      const tx = top.x + upX * lift;
+      const ty = top.y + upY * lift;
+      const tw = faceWidth * 1.15;      // brim a bit wider than the face
+
+      if (!hat.ready) {
+        Object.assign(hat, { ready: true, x: tx, y: ty, width: tw, angle: tilt });
+        return;
+      }
+      // Glide smoothly, same as the eyes
+      hat.x     += (tx - hat.x) * SMOOTHING;
+      hat.y     += (ty - hat.y) * SMOOTHING;
+      hat.width += (tw - hat.width) * SMOOTHING;
+      hat.angle += (tilt - hat.angle) * SMOOTHING;
+    }
+
+    /* =========================================================
+       DRAW THE RED TOP HAT
+       We move the drawing "pen" to the hat's spot and turn it to
+       match your head tilt, then draw: the tall red crown, a
+       black band, and a wide red brim.
+       ========================================================= */
+    function drawHat() {
+      if (!hat.ready) return;
+      const w = hat.width;
+      const crownW = w * 0.62;     // the tall part is narrower than the brim
+      const crownH = w * 0.62;
+      const brimH  = w * 0.14;
+
+      ctx.save();
+      ctx.translate(hat.x, hat.y);
+      ctx.rotate(hat.angle);       // now "up" on the page is "up" for your head
+
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = w * 0.05;
+      ctx.lineWidth = Math.max(2, w * 0.015);
+      ctx.strokeStyle = "#5a0b0b";
+
+      // Crown: a tall box with a rounded oval top
+      const crownGrad = ctx.createLinearGradient(-crownW / 2, 0, crownW / 2, 0);
+      crownGrad.addColorStop(0,   "#a3121b");
+      crownGrad.addColorStop(0.4, "#e3262f");
+      crownGrad.addColorStop(1,   "#8c0f17");
+      ctx.beginPath();
+      ctx.moveTo(-crownW / 2, 0);
+      ctx.lineTo(-crownW / 2, -crownH);
+      ctx.ellipse(0, -crownH, crownW / 2, brimH * 0.45, 0, Math.PI, 0);
+      ctx.lineTo(crownW / 2, 0);
+      ctx.closePath();
+      ctx.fillStyle = crownGrad;
+      ctx.fill();
+      ctx.stroke();
+
+      // Top of the crown (a lighter oval, so it looks 3D)
+      ctx.shadowColor = "transparent";
+      ctx.beginPath();
+      ctx.ellipse(0, -crownH, crownW / 2, brimH * 0.45, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#f04a50";
+      ctx.fill();
+      ctx.stroke();
+
+      // Black band around the bottom of the crown
+      const bandH = crownH * 0.18;
+      ctx.fillStyle = "#1a1a1a";
+      ctx.fillRect(-crownW / 2, -bandH - brimH * 0.2, crownW, bandH);
+
+      // Brim: a wide flat oval at the bottom
+      ctx.beginPath();
+      ctx.ellipse(0, 0, w / 2, brimH / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#c81d25";
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    /* =========================================================
+       PUPIL PHYSICS - the fun part!
+       The pupil is like a loose ball inside a round case:
+       - gravity pulls it down
+       - when your head jerks one way, the pupil "lags behind"
+         (pushed the opposite way, like you in a car that brakes)
+       - when it hits the edge, it bounces back a bit
+       ========================================================= */
+    function updatePupil(e, dt) {
+      if (!e.ready) return;
+      const limit = e.r * (1 - PUPIL_SIZE);  // how far the pupil can travel from centre
+
+      // Limit extreme jerks so tracking glitches don't explode the pupil
+      const maxA = e.r * 400;
+      const ax = Math.max(-maxA, Math.min(maxA, e.ax));
+      const ay = Math.max(-maxA, Math.min(maxA, e.ay));
+
+      // Forces on the pupil: gravity down, minus the eye's own acceleration
+      const forceX = -ax * SHAKE_POWER;
+      const forceY = GRAVITY * e.r - ay * SHAKE_POWER;
+
+      // Update speed, then slow it slightly (air drag)
+      e.pvx += forceX * dt;
+      e.pvy += forceY * dt;
+      const drag = Math.exp(-AIR_DRAG * dt);
+      e.pvx *= drag;
+      e.pvy *= drag;
+
+      // Move the pupil
+      e.px += e.pvx * dt;
+      e.py += e.pvy * dt;
+
+      // Keep it inside the eye, bouncing off the round edge
+      const dist = Math.hypot(e.px, e.py);
+      if (dist > limit) {
+        // Direction pointing outward from the centre
+        const nx = e.px / dist, ny = e.py / dist;
+        // Put the pupil back right on the edge
+        e.px = nx * limit;
+        e.py = ny * limit;
+        // Split the speed into "into the wall" and "along the wall"
+        const into = e.pvx * nx + e.pvy * ny;
+        if (into > 0) {
+          // Bounce: reverse the into-the-wall part, losing some energy
+          e.pvx -= (1 + BOUNCINESS) * into * nx;
+          e.pvy -= (1 + BOUNCINESS) * into * ny;
+          // A little rolling friction along the edge
+          e.pvx *= 0.97;
+          e.pvy *= 0.97;
+        }
+      }
+    }
+
+    /* =========================================================
+       DRAW ONE GOOGLY EYE
+       White ball with a dark rim, a soft shadow, the black pupil,
+       and a tiny shine dot so it looks shiny and plastic.
+       ========================================================= */
+    function drawGooglyEye(e) {
+      if (!e.ready) return;
+      const { x, y, r } = e;
+
+      // Soft shadow under the eye
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = r * 0.25;
+      ctx.shadowOffsetY = r * 0.08;
+
+      // White of the eye (slight gradient = rounded plastic look)
+      const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(1, "#e4e4e4");
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore();
+
+      // Dark rim around the eye
+      ctx.lineWidth = Math.max(2, r * 0.07);
+      ctx.strokeStyle = "#222";
+      ctx.stroke();
+
+      // Black pupil
+      const pr = r * PUPIL_SIZE;
+      ctx.beginPath();
+      ctx.arc(x + e.px, y + e.py, pr, 0, Math.PI * 2);
+      ctx.fillStyle = "#111";
+      ctx.fill();
+
+      // Eyelid: a skin-coloured shade that slides down from the top as
+      // your real eye closes. We "clip" to the eye's circle so the lid
+      // never spills outside it, and tilt it along with your head.
+      if (e.open < 0.98) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.translate(x, y);
+        ctx.rotate(e.angle);
+        // Lid edge goes from the top (-r, open) down to the bottom (+r, shut)
+        const edge = -r + 2 * r * (1 - e.open);
+        ctx.beginPath();
+        ctx.moveTo(-r * 1.2, -r * 1.2);
+        ctx.lineTo( r * 1.2, -r * 1.2);
+        ctx.lineTo( r * 1.2, edge);
+        // A gentle downward curve, like a real eyelid
+        ctx.quadraticCurveTo(0, edge + r * 0.35 * e.open, -r * 1.2, edge);
+        ctx.closePath();
+        ctx.fillStyle = "#f2b48f";
+        ctx.fill();
+        ctx.lineWidth = Math.max(2, r * 0.06);
+        ctx.strokeStyle = "#7a4a33";
+        ctx.stroke();
+        ctx.restore();
+
+        // Redraw the rim on top so the eye keeps its clean outline
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.lineWidth = Math.max(2, r * 0.07);
+        ctx.strokeStyle = "#222";
+        ctx.stroke();
+      }
+
+      // Shine on the plastic dome (stays put - it's a reflection)
+      ctx.beginPath();
+      ctx.ellipse(x - r * 0.35, y - r * 0.45, r * 0.22, r * 0.12, -0.6, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fill();
+    }
+
+    /* =========================================================
+       BUTTON WIRING
+       <button> elements already work with Enter and Space keys,
+       so keyboard users get the same controls for free.
+       ========================================================= */
+    startBtn.addEventListener("click", startCamera);
+    stopBtn.addEventListener("click", () => stopCamera(true));
+
+    // Turn the camera off if the page is closed or hidden for good
+    window.addEventListener("pagehide", () => stopCamera(false));
+  </script>
+</body>
+</html>
