@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+  ============================================================
+  SPREADSHEET DASHBOARD
+  Turns a CSV or Excel file into big numbers, charts and a table.
+  Everything runs in your browser. The file is never uploaded.
+  ============================================================
+
+  VERSION HISTORY
+  v1.0 - 2026-10-19 - initial build: CSV/XLSX loading (button + drag and drop),
+                      label/number column pickers, sheet picker for multi-sheet
+                      workbooks, four summary numbers, bar + line charts, data table.
+
+  LIBRARIES (each pinned to an exact version)
+  1. Chart.js
+     Version: 4.4.1
+     Source:  jsDelivr CDN - https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js
+     Purpose: Draws the bar chart and the line chart.
+
+  2. SheetJS Community Edition (xlsx)
+     Version: 0.20.3
+     Source:  Official SheetJS CDN - https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js
+              (SheetJS publishes current versions on its own CDN; the copies on
+              npm/jsDelivr/cdnjs are stuck at an older 0.18.5 release.)
+     Purpose: Reads Excel (.xlsx, .xls) and CSV files into rows and columns.
+
+  Note: the libraries are downloaded from the CDN when the page opens.
+  Your spreadsheet itself is read locally and is never sent anywhere.
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spreadsheet Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+<style>
+  /* ---------- Color tokens (light mode) ---------- */
+  :root {
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --text: #1d2433;
+    --muted: #5a6478;
+    --border: #d9dee7;
+    --accent: #2f6fdb;
+    --accent-soft: rgba(47, 111, 219, 0.18);
+    --accent-2: #e0712b;
+    --focus: #ffb000;
+    --danger: #b3261e;
+    --radius: 12px;
+    color-scheme: light dark;
+  }
+  /* ---------- Color tokens (dark mode) ---------- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c;
+      --surface: #1c212b;
+      --text: #e8ebf1;
+      --muted: #a3acbd;
+      --border: #333b4a;
+      --accent: #6ea1ff;
+      --accent-soft: rgba(110, 161, 255, 0.22);
+      --accent-2: #ff9a5c;
+      --danger: #ff8a80;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  h1 { margin: 0 0 4px; font-size: clamp(1.5rem, 4vw, 2.1rem); }
+  h2 { font-size: 1.15rem; margin: 0 0 12px; }
+  .privacy { margin: 0 0 24px; color: var(--muted); }
+
+  /* Visually hidden but still read by screen readers */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* Clear keyboard focus ring on everything focusable */
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+
+  /* ---------- Drop zone ---------- */
+  .dropzone {
+    border: 2px dashed var(--border);
+    text-align: center;
+    padding: 32px 16px;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.is-dragging { border-color: var(--accent); background: var(--accent-soft); }
+  .dropzone p { margin: 8px 0 0; color: var(--muted); }
+
+  button {
+    font: inherit; font-weight: 600;
+    background: var(--accent); color: #fff;
+    border: 0; border-radius: 8px;
+    padding: 12px 22px; cursor: pointer;
+    min-height: 44px;
+  }
+  @media (prefers-color-scheme: dark) { button { color: #0b1220; } }
+  button:hover { filter: brightness(1.08); }
+
+  .status { min-height: 1.5em; margin: 12px 0 0; }
+  .status.error { color: var(--danger); font-weight: 600; }
+
+  /* ---------- Column pickers ---------- */
+  .controls { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
+  .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; }
+  .field label { font-weight: 600; font-size: .95rem; }
+  select {
+    font: inherit; padding: 10px; min-height: 44px;
+    border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text);
+  }
+
+  /* ---------- Big numbers ---------- */
+  .stats {
+    list-style: none; margin: 0 0 24px; padding: 0;
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .stat .label { color: var(--muted); font-size: .9rem; }
+  .stat .value {
+    font-size: clamp(1.4rem, 3.2vw, 2rem); font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .stat .sub { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+
+  /* ---------- Charts ---------- */
+  .charts { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; margin-bottom: 24px; }
+  figure { margin: 0; }
+  .chart-box { position: relative; height: 320px; }
+  figcaption { font-weight: 600; margin-bottom: 8px; }
+
+  /* ---------- Table ---------- */
+  .table-scroll { overflow-x: auto; max-height: 520px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+  caption { text-align: left; color: var(--muted); padding-bottom: 8px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  thead th { position: sticky; top: 0; background: var(--surface); }
+  th.picked, td.picked { background: var(--accent-soft); }
+
+  /* ---------- Responsive breakpoints ---------- */
+  @media (max-width: 900px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .charts { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    .stats { grid-template-columns: 1fr; }
+    .chart-box { height: 260px; }
+    .card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Spreadsheet Dashboard</h1>
+    <p class="privacy">🔒 Your file never leaves this computer. Everything happens right here in your browser.</p>
+  </header>
+
+  <main>
+    <!-- Step 1: load a file -->
+    <section aria-labelledby="load-heading">
+      <h2 id="load-heading" class="sr-only">Load a spreadsheet</h2>
+      <div id="dropZone" class="card dropzone">
+        <button type="button" id="chooseBtn">Choose a CSV or Excel file</button>
+        <input type="file" id="fileInput" class="sr-only" tabindex="-1"
+               accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+               aria-hidden="true">
+        <p>…or drag a file anywhere onto this page.</p>
+      </div>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- Step 2: the dashboard (hidden until a file loads) -->
+    <section id="dashboard" aria-labelledby="dash-heading" hidden>
+      <h2 id="dash-heading">Dashboard</h2>
+
+      <form class="controls" aria-label="Choose which columns to chart" onsubmit="return false">
+        <div class="field" id="sheetField" hidden>
+          <label for="sheetSelect">Sheet</label>
+          <select id="sheetSelect"></select>
+        </div>
+        <div class="field">
+          <label for="labelSelect">Labels column</label>
+          <select id="labelSelect"></select>
+        </div>
+        <div class="field">
+          <label for="valueSelect">Numbers column</label>
+          <select id="valueSelect"></select>
+        </div>
+      </form>
+
+      <ul class="stats" aria-label="Summary numbers">
+        <li class="card stat"><div class="label">Rows</div><div class="value" id="statRows">—</div><div class="sub" id="statRowsSub"></div></li>
+        <li class="card stat"><div class="label">Total</div><div class="value" id="statTotal">—</div></li>
+        <li class="card stat"><div class="label">Average</div><div class="value" id="statAvg">—</div></li>
+        <li class="card stat"><div class="label">Highest</div><div class="value" id="statMax">—</div><div class="sub" id="statMaxLabel"></div></li>
+      </ul>
+
+      <div class="charts">
+        <figure class="card">
+          <figcaption id="barCaption">Bar chart</figcaption>
+          <div class="chart-box"><canvas id="barChart" role="img" aria-label="Bar chart"></canvas></div>
+        </figure>
+        <figure class="card">
+          <figcaption id="lineCaption">Line chart</figcaption>
+          <div class="chart-box"><canvas id="lineChart" role="img" aria-label="Line chart"></canvas></div>
+        </figure>
+      </div>
+
+      <section class="card" aria-labelledby="table-heading">
+        <h2 id="table-heading">Data</h2>
+        <div class="table-scroll" tabindex="0" role="region" aria-labelledby="table-heading">
+          <table id="dataTable">
+            <caption id="tableCaption"></caption>
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+</div>
+
+<script>
+'use strict';
+// v1.0 - initial build
+
+/* ------------------------------------------------------------
+   SETTINGS
+   How many table rows to draw. Very big spreadsheets would make
+   the page slow, so the table shows the first rows only.
+   The big numbers and charts always use every row.
+------------------------------------------------------------ */
+const MAX_TABLE_ROWS = 1000;
+
+/* ------------------------------------------------------------
+   PAGE ELEMENTS
+   Grab every part of the page we need to read or change, once,
+   so the rest of the code can refer to them by a short name.
+------------------------------------------------------------ */
+const els = {
+  dropZone:    document.getElementById('dropZone'),
+  chooseBtn:   document.getElementById('chooseBtn'),
+  fileInput:   document.getElementById('fileInput'),
+  status:      document.getElementById('status'),
+  dashboard:   document.getElementById('dashboard'),
+  sheetField:  document.getElementById('sheetField'),
+  sheetSelect: document.getElementById('sheetSelect'),
+  labelSelect: document.getElementById('labelSelect'),
+  valueSelect: document.getElementById('valueSelect'),
+  statRows:    document.getElementById('statRows'),
+  statRowsSub: document.getElementById('statRowsSub'),
+  statTotal:   document.getElementById('statTotal'),
+  statAvg:     document.getElementById('statAvg'),
+  statMax:     document.getElementById('statMax'),
+  statMaxLabel:document.getElementById('statMaxLabel'),
+  barCanvas:   document.getElementById('barChart'),
+  lineCanvas:  document.getElementById('lineChart'),
+  barCaption:  document.getElementById('barCaption'),
+  lineCaption: document.getElementById('lineCaption'),
+  table:       document.getElementById('dataTable'),
+  tableCaption:document.getElementById('tableCaption')
+};
+
+/* ------------------------------------------------------------
+   APP STATE
+   The things the page remembers while you use it:
+   - workbook: the whole file as SheetJS read it
+   - headers:  the column names (the first row of the sheet)
+   - rows:     every data row, as a list of cell values
+   - charts:   the two Chart.js charts, so we can replace them later
+------------------------------------------------------------ */
+const state = {
+  workbook: null,
+  fileName: '',
+  headers: [],
+  rows: [],
+  charts: { bar: null, line: null }
+};
+
+/* ------------------------------------------------------------
+   NUMBER FORMATTING
+   Shows numbers the way people expect in their own country,
+   for example 12,345.67, with at most two decimal places.
+------------------------------------------------------------ */
+const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+const fmt = (n) => numberFormat.format(n);
+
+/* ------------------------------------------------------------
+   STATUS MESSAGES
+   Writes a short message under the drop zone. The message area
+   is a "live region", so screen readers announce it out loud.
+   Error messages are shown in red.
+------------------------------------------------------------ */
+function setStatus(message, isError = false) {
+  els.status.textContent = message;
+  els.status.classList.toggle('error', isError);
+}
+
+/* ------------------------------------------------------------
+   LIBRARY CHECK
+   If the internet connection failed, the two libraries will be
+   missing. Tell the person right away instead of failing quietly.
+------------------------------------------------------------ */
+if (typeof XLSX === 'undefined' || typeof Chart === 'undefined') {
+  setStatus('The chart and spreadsheet tools could not be loaded. Check your internet connection and reload the page.', true);
+}
+
+/* ------------------------------------------------------------
+   TURN A CELL INTO A NUMBER
+   Spreadsheet cells can look like "1,234", "$45.00", "12%"
+   or "(300)" (accounting style for minus 300). This removes the
+   extra symbols and returns a real number. If the cell is empty
+   or is not a number at all, it returns null ("nothing").
+------------------------------------------------------------ */
+function parseNumber(cell) {
+  if (typeof cell === 'number') return Number.isFinite(cell) ? cell : null;
+  let text = String(cell ?? '').trim();
+  if (text === '') return null;
+
+  // "(300)" means minus 300 in accounting
+  let negative = false;
+  if (/^\(.*\)$/.test(text)) { negative = true; text = text.slice(1, -1); }
+
+  // Remove currency signs, thousands commas, spaces and percent signs
+  text = text.replace(/[$€£¥₹,\s%]/g, '');
+  if (text === '' || !/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(text)) return null;
+
+  const value = Number(text);
+  if (!Number.isFinite(value)) return null;
+  return negative ? -value : value;
+}
+
+/* ------------------------------------------------------------
+   OPENING A FILE WITH THE BUTTON
+   The real file picker is hidden; the friendly button opens it.
+------------------------------------------------------------ */
+els.chooseBtn.addEventListener('click', () => els.fileInput.click());
+els.fileInput.addEventListener('change', () => {
+  const file = els.fileInput.files[0];
+  if (file) handleFile(file);
+  els.fileInput.value = ''; // lets you pick the same file again later
+});
+
+/* ------------------------------------------------------------
+   DRAG AND DROP ANYWHERE ON THE PAGE
+   While a file is being dragged over the page, the drop zone
+   lights up. When the file is dropped, we read it.
+   The counter stops the highlight from flickering as the mouse
+   moves over different parts of the page.
+   preventDefault() stops the browser from opening the file in a
+   new tab instead of giving it to our page.
+------------------------------------------------------------ */
+let dragDepth = 0;
+const draggingFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+
+window.addEventListener('dragenter', (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  els.dropZone.classList.add('is-dragging');
+});
+window.addEventListener('dragover', (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+window.addEventListener('dragleave', (e) => {
+  if (!draggingFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) els.dropZone.classList.remove('is-dragging');
+});
+window.addEventListener('drop', (e) => {
+  if (!draggingFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  els.dropZone.classList.remove('is-dragging');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+
+/* ------------------------------------------------------------
+   READ THE FILE
+   1. Check that it is a CSV or Excel file.
+   2. Read its bytes into memory (this stays on your computer).
+   3. Ask SheetJS to understand it. SheetJS reads CSV too, so one
+      path works for every file type.
+   4. Fill in the sheet picker and show the first sheet.
+------------------------------------------------------------ */
+async function handleFile(file) {
+  if (typeof XLSX === 'undefined') {
+    setStatus('The spreadsheet reader did not load. Check your internet connection and reload.', true);
+    return;
+  }
+  if (!/\.(csv|xlsx|xls)$/i.test(file.name)) {
+    setStatus(`"${file.name}" is not a CSV or Excel file. Please choose a .csv, .xlsx or .xls file.`, true);
+    return;
+  }
+
+  setStatus(`Reading "${file.name}"…`);
+  try {
+    const bytes = await file.arrayBuffer();
+    state.workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
+    state.fileName = file.name;
+  } catch (err) {
+    console.error(err);
+    setStatus(`Sorry, "${file.name}" could not be read. It may be damaged or password protected.`, true);
+    return;
+  }
+
+  // Fill the sheet picker. It is only shown if there is more than one sheet.
+  const names = state.workbook.SheetNames;
+  els.sheetSelect.replaceChildren(...names.map((name) => new Option(name, name)));
+  els.sheetField.hidden = names.length < 2;
+
+  loadSheet(names[0]);
+}
+
+/* ------------------------------------------------------------
+   LOAD ONE SHEET
+   Turns a sheet into a simple grid: a list of rows, each row a
+   list of cells. The first row becomes the column names. Empty
+   column names get a stand-in like "Column 3".
+   Then it fills the two column pickers and makes a smart first
+   guess: text for labels, numbers for values.
+------------------------------------------------------------ */
+function loadSheet(sheetName) {
+  const sheet = state.workbook.Sheets[sheetName];
+  const grid = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,        // give us plain rows, not objects
+    raw: false,       // give us cells as they look in the spreadsheet (dates stay readable)
+    defval: '',       // empty cells become empty text instead of disappearing
+    blankrows: false  // skip completely empty rows
+  });
+
+  if (grid.length < 2) {
+    els.dashboard.hidden = true;
+    setStatus(`The sheet "${sheetName}" needs a header row plus at least one row of data.`, true);
+    return;
+  }
+
+  // Work out how many columns the widest row has, so no data is lost
+  const width = Math.max(...grid.map((row) => row.length));
+  state.headers = Array.from({ length: width }, (_, i) => {
+    const name = String(grid[0][i] ?? '').trim();
+    return name || `Column ${i + 1}`;
+  });
+  state.rows = grid.slice(1).map((row) => state.headers.map((_, i) => row[i] ?? ''));
+
+  // Fill both column pickers with the column names
+  const makeOptions = () => state.headers.map((h, i) => new Option(h, String(i)));
+  els.labelSelect.replaceChildren(...makeOptions());
+  els.valueSelect.replaceChildren(...makeOptions());
+
+  // Smart guess: the first mostly-number column holds the values,
+  // and the first mostly-text column holds the labels.
+  const shares = state.headers.map((_, i) => numericShare(i));
+  let valueIndex = shares.findIndex((s) => s >= 0.6);
+  if (valueIndex === -1) valueIndex = Math.min(1, width - 1);
+  let labelIndex = shares.findIndex((s, i) => s < 0.6 && i !== valueIndex);
+  if (labelIndex === -1) labelIndex = valueIndex === 0 && width > 1 ? 1 : 0;
+
+  els.labelSelect.value = String(labelIndex);
+  els.valueSelect.value = String(valueIndex);
+
+  els.dashboard.hidden = false;
+  setStatus(`Loaded "${state.fileName}"${state.workbook.SheetNames.length > 1 ? `, sheet "${sheetName}"` : ''}: ${fmt(state.rows.length)} rows and ${width} columns.`);
+  updateDashboard();
+}
+
+/* ------------------------------------------------------------
+   HOW "NUMBER-Y" IS A COLUMN?
+   Returns a share between 0 and 1: how many of the filled-in
+   cells in that column are numbers. Used for the smart guess.
+------------------------------------------------------------ */
+function numericShare(colIndex) {
+  let filled = 0, numbers = 0;
+  for (const row of state.rows) {
+    if (String(row[colIndex]).trim() === '') continue;
+    filled++;
+    if (parseNumber(row[colIndex]) !== null) numbers++;
+  }
+  return filled ? numbers / filled : 0;
+}
+
+/* ------------------------------------------------------------
+   PICKER CHANGES
+   Whenever you choose a different sheet or column, redraw.
+------------------------------------------------------------ */
+els.sheetSelect.addEventListener('change', () => loadSheet(els.sheetSelect.value));
+els.labelSelect.addEventListener('change', updateDashboard);
+els.valueSelect.addEventListener('change', updateDashboard);
+
+/* ------------------------------------------------------------
+   UPDATE EVERYTHING
+   Pairs each row's label with its number, skips rows whose
+   number cell is empty or not a number, then refreshes the big
+   numbers, the two charts and the table.
+------------------------------------------------------------ */
+function updateDashboard() {
+  const labelIndex = Number(els.labelSelect.value);
+  const valueIndex = Number(els.valueSelect.value);
+  const labelName = state.headers[labelIndex];
+  const valueName = state.headers[valueIndex];
+
+  const points = state.rows
+    .map((row, i) => ({
+      label: String(row[labelIndex]).trim() || `Row ${i + 1}`,
+      value: parseNumber(row[valueIndex])
+    }))
+    .filter((p) => p.value !== null);
+
+  updateStats(points, valueName);
+  updateCharts(points, labelName, valueName);
+  updateTable(labelIndex, valueIndex);
+
+  if (points.length === 0) {
+    setStatus(`The column "${valueName}" has no numbers in it. Pick a different numbers column.`, true);
+  } else if (els.status.classList.contains('error')) {
+    setStatus(`Showing "${valueName}" by "${labelName}".`);
+  }
+}
+
+/* ------------------------------------------------------------
+   THE FOUR BIG NUMBERS
+   - Rows:    how many data rows the sheet has
+   - Total:   all the numbers added together
+   - Average: the total divided by how many numbers there are
+   - Highest: the biggest number, with the label from its row
+------------------------------------------------------------ */
+function updateStats(points, valueName) {
+  els.statRows.textContent = fmt(state.rows.length);
+  const skipped = state.rows.length - points.length;
+  els.statRowsSub.textContent = skipped > 0
+    ? `${fmt(skipped)} without a number in "${valueName}"`
+    : '';
+
+  if (points.length === 0) {
+    els.statTotal.textContent = els.statAvg.textContent = els.statMax.textContent = '—';
+    els.statMaxLabel.textContent = '';
+    return;
+  }
+
+  const total = points.reduce((sum, p) => sum + p.value, 0);
+  const highest = points.reduce((best, p) => (p.value > best.value ? p : best), points[0]);
+
+  els.statTotal.textContent = fmt(total);
+  els.statAvg.textContent = fmt(total / points.length);
+  els.statMax.textContent = fmt(highest.value);
+  els.statMaxLabel.textContent = highest.label;
+}
+
+/* ------------------------------------------------------------
+   THE TWO CHARTS
+   Throws away the old charts and draws new ones with Chart.js.
+   Colors come from the page's own color tokens, so the charts
+   match light and dark mode. Animation is turned off for people
+   who have asked their device to reduce motion.
+   Each chart also gets a written description (aria-label) so
+   screen reader users get the same key facts.
+------------------------------------------------------------ */
+function updateCharts(points, labelName, valueName) {
+  if (typeof Chart === 'undefined') return;
+
+  state.charts.bar?.destroy();
+  state.charts.line?.destroy();
+
+  const css = getComputedStyle(document.documentElement);
+  const color = (name) => css.getPropertyValue(name).trim();
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const labels = points.map((p) => p.label);
+  const values = points.map((p) => p.value);
+  const title = `${valueName} by ${labelName}`;
+
+  els.barCaption.textContent = `Bar chart: ${title}`;
+  els.lineCaption.textContent = `Line chart: ${title}`;
+
+  // Settings shared by both charts
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: reduceMotion ? false : { duration: 400 },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: (ctx) => `${valueName}: ${fmt(ctx.parsed.y)}` } }
+    },
+    scales: {
+      x: { ticks: { color: color('--muted'), maxRotation: 60, autoSkip: true }, grid: { color: color('--border') } },
+      y: { ticks: { color: color('--muted'), callback: (v) => fmt(v) }, grid: { color: color('--border') } }
+    }
+  };
+
+  state.charts.bar = new Chart(els.barCanvas, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: valueName, data: values, backgroundColor: color('--accent'), borderRadius: 4 }] },
+    options
+  });
+
+  state.charts.line = new Chart(els.lineCanvas, {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: valueName, data: values,
+      borderColor: color('--accent-2'), backgroundColor: color('--accent-2'),
+      pointRadius: points.length > 60 ? 0 : 3, tension: 0.25
+    }] },
+    options
+  });
+
+  // Written summary for screen readers
+  let summary = `${title}. No numbers to show.`;
+  if (points.length) {
+    const max = points.reduce((a, b) => (b.value > a.value ? b : a));
+    const min = points.reduce((a, b) => (b.value < a.value ? b : a));
+    summary = `${title}. ${points.length} values. Highest: ${max.label}, ${fmt(max.value)}. Lowest: ${min.label}, ${fmt(min.value)}. Full data is in the table below.`;
+  }
+  els.barCanvas.setAttribute('aria-label', `Bar chart of ${summary}`);
+  els.lineCanvas.setAttribute('aria-label', `Line chart of ${summary}`);
+}
+
+/* ------------------------------------------------------------
+   THE DATA TABLE
+   Builds a plain table with every column. The two columns you
+   picked are lightly highlighted. Cell text is added with
+   textContent, so nothing in the file can run as code.
+   Only the first MAX_TABLE_ROWS rows are drawn to keep it fast.
+------------------------------------------------------------ */
+function updateTable(labelIndex, valueIndex) {
+  const picked = (i) => (i === labelIndex || i === valueIndex ? 'picked' : '');
+
+  // Header row
+  const headRow = document.createElement('tr');
+  state.headers.forEach((name, i) => {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.textContent = name;
+    if (picked(i)) th.className = 'picked';
+    headRow.appendChild(th);
+  });
+  els.table.tHead.replaceChildren(headRow);
+
+  // Body rows, built off-screen first so the page updates in one go
+  const fragment = document.createDocumentFragment();
+  state.rows.slice(0, MAX_TABLE_ROWS).forEach((row) => {
+    const tr = document.createElement('tr');
+    row.forEach((cell, i) => {
+      const td = document.createElement('td');
+      td.textContent = String(cell);
+      if (picked(i)) td.className = 'picked';
+      tr.appendChild(td);
+    });
+    fragment.appendChild(tr);
+  });
+  els.table.tBodies[0].replaceChildren(fragment);
+
+  const shown = Math.min(state.rows.length, MAX_TABLE_ROWS);
+  els.tableCaption.textContent = shown < state.rows.length
+    ? `Showing the first ${fmt(shown)} of ${fmt(state.rows.length)} rows from ${state.fileName}. The numbers and charts above use all rows.`
+    : `All ${fmt(state.rows.length)} rows from ${state.fileName}. Highlighted columns are the ones being charted.`;
+}
+
+/* ------------------------------------------------------------
+   LIGHT / DARK MODE SWITCH
+   If your device switches between light and dark mode while the
+   page is open, redraw the charts in the new colors.
+------------------------------------------------------------ */
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  if (state.rows.length) updateDashboard();
+});
+</script>
+</body>
+</html>
