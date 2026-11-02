@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<!--
+  QR Code Scanner
+  ================================================================
+  Version history
+  v1.0 - 2026-11-01 - initial build: back-camera scanning, picture
+                      scanning (file or paste), box around the code,
+                      plain-text result, safe link handling + warnings
+  v1.1 - 2026-11-01 - added "Scanned this session" list (newest first),
+                      each with Copy; links shown the same careful way
+                      with an Open button you must press. The list lives
+                      only in memory and clears when the page closes.
+
+  Libraries used
+  ----------------------------------------------------------------
+  Name:    jsQR
+  Version: 1.4.0 (pinned)
+  Source:  jsDelivr CDN - https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js
+           (official npm package "jsqr" by cozmo, https://github.com/cozmo/jsQR)
+  Purpose: Looks at the pixels of an image and finds / decodes a QR code.
+           It runs entirely in the browser; nothing is uploaded anywhere.
+
+  Privacy: no data is sent to any server. The camera picture and any
+  picture you choose stay on your device. Links are NEVER opened
+  automatically.
+
+  Note: browsers only allow camera access on pages served over https
+  (or from localhost). Opening this file directly from your computer
+  works in most browsers for the picture scanner; the camera may need
+  the page to be hosted on https.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR Code Scanner</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #ffffff;
+      --text: #1d2430;
+      --muted: #5a6475;
+      --accent: #1f6feb;
+      --accent-dark: #174ea6;
+      --danger: #b42318;
+      --warn-bg: #fff4e5;
+      --warn-border: #f0a020;
+      --ok: #1a7f37;
+      --focus: #ffbf47;
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #12161c;
+        --card: #1c222b;
+        --text: #e8edf3;
+        --muted: #a2adbd;
+        --accent: #4c8dff;
+        --accent-dark: #2f6fe0;
+        --danger: #ff6b5e;
+        --warn-bg: #3a2a10;
+        --warn-border: #f0a020;
+        --ok: #4cc26b;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+    .intro { color: var(--muted); margin: 0 0 16px; }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+    button, .btn {
+      font: inherit;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 18px;
+      min-height: 48px;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      flex: 1 1 160px;
+    }
+    button:hover { background: var(--accent-dark); }
+    button.secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 2px solid var(--accent);
+    }
+    button.secondary:hover { background: rgba(31,111,235,.08); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    button:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+    .viewer {
+      position: relative;
+      margin-top: 16px;
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      min-height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .viewer canvas { display: block; width: 100%; height: auto; }
+    .viewer .placeholder { color: #c9d1dc; padding: 24px; text-align: center; }
+    .hidden { display: none !important; }
+    .status { margin: 12px 0 0; color: var(--muted); min-height: 1.5em; }
+    .status.error { color: var(--danger); font-weight: 600; }
+    .hint { font-size: .9rem; color: var(--muted); margin: 10px 0 0; }
+    h2 { font-size: 1.2rem; margin: 0 0 10px; }
+    .site-name {
+      font-size: clamp(1.8rem, 7vw, 2.8rem);
+      font-weight: 800;
+      word-break: break-all;
+      margin: 4px 0 12px;
+      line-height: 1.15;
+    }
+    .label { font-size: .85rem; color: var(--muted); margin: 0; text-transform: uppercase; letter-spacing: .04em; }
+    pre.raw {
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 4px 0 12px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: .95rem;
+    }
+    .warnings { list-style: none; padding: 0; margin: 0 0 12px; }
+    .warnings li {
+      background: var(--warn-bg);
+      border-left: 5px solid var(--warn-border);
+      padding: 10px 12px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+    .safe-note { color: var(--ok); font-weight: 600; margin: 0 0 12px; }
+    /* v1.1 - scan history list */
+    .history-list { list-style: none; padding: 0; margin: 0; }
+    .history-item {
+      border-top: 1px solid rgba(128,128,128,.25);
+      padding: 14px 0;
+    }
+    .history-item:first-child { border-top: none; padding-top: 0; }
+    .history-time { font-size: .85rem; color: var(--muted); margin: 0 0 4px; }
+    .history-site {
+      font-size: clamp(1.3rem, 5vw, 1.8rem);
+      font-weight: 800;
+      word-break: break-all;
+      margin: 0 0 8px;
+      line-height: 1.2;
+    }
+    .history-item pre.raw { margin-bottom: 10px; }
+    .history-item .warnings li { padding: 8px 10px; font-size: .95rem; }
+    .empty-note { color: var(--muted); margin: 0; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>QR Code Scanner</h1>
+      <p class="intro">Point your camera at a QR code, or scan a picture of one. Everything stays on your device, and links never open by themselves.</p>
+    </header>
+
+    <!-- Scanner controls and the picture area -->
+    <section class="card" aria-labelledby="scan-heading">
+      <h2 id="scan-heading">Scan</h2>
+      <div class="buttons">
+        <button type="button" id="startBtn">Start camera</button>
+        <button type="button" id="stopBtn" class="secondary" disabled>Stop camera</button>
+        <button type="button" id="pictureBtn" class="secondary">Scan a picture instead</button>
+      </div>
+      <!-- Hidden file picker; the "Scan a picture instead" button opens it -->
+      <input type="file" id="fileInput" accept="image/*" class="sr-only" tabindex="-1" aria-hidden="true">
+      <p class="hint">Tip: on a laptop you can also copy a screenshot and press Ctrl+V (or ⌘+V) on this page.</p>
+
+      <div class="viewer" id="viewer">
+        <p class="placeholder" id="placeholder">The camera or your picture will appear here.</p>
+        <!-- The camera video plays here but stays hidden; we copy its frames onto the canvas -->
+        <video id="video" class="hidden" playsinline muted aria-hidden="true"></video>
+        <canvas id="canvas" class="hidden" role="img" aria-label="Camera view"></canvas>
+      </div>
+
+      <!-- Screen readers announce changes in this line automatically -->
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <!-- Result appears here once a code is found -->
+    <section class="card hidden" id="resultCard" aria-labelledby="result-heading">
+      <h2 id="result-heading" tabindex="-1">Code found</h2>
+
+      <div id="linkBlock" class="hidden">
+        <p class="label">Website</p>
+        <p class="site-name" id="siteName"></p>
+        <ul class="warnings" id="warnings" aria-label="Warnings about this link"></ul>
+        <p class="safe-note hidden" id="safeNote">No warning signs found — but only open links you trust.</p>
+      </div>
+
+      <p class="label">Exactly what the code says</p>
+      <pre class="raw" id="rawText"></pre>
+
+      <div class="buttons">
+        <button type="button" id="openBtn" class="hidden">Open this link</button>
+        <button type="button" id="copyBtn" class="secondary">Copy text</button>
+      </div>
+    </section>
+
+    <!-- v1.1 - Every code scanned since the page opened, newest first.
+         Kept in memory only; it disappears when you close or reload the page. -->
+    <section class="card" aria-labelledby="history-heading">
+      <h2 id="history-heading">Scanned this session <span id="historyCount"></span></h2>
+      <p class="empty-note" id="historyEmpty">Nothing scanned yet.</p>
+      <ol class="history-list" id="historyList" aria-label="Scanned codes, newest first" reversed></ol>
+    </section>
+  </main>
+
+  <script>
+    // v1.0 - initial build
+
+    // ------------------------------------------------------------
+    // 1. Grab references to every piece of the page we'll work with,
+    //    so we don't have to search for them again later.
+    // ------------------------------------------------------------
+    const startBtn    = document.getElementById('startBtn');
+    const stopBtn     = document.getElementById('stopBtn');
+    const pictureBtn  = document.getElementById('pictureBtn');
+    const fileInput   = document.getElementById('fileInput');
+    const video       = document.getElementById('video');
+    const canvas      = document.getElementById('canvas');
+    const ctx         = canvas.getContext('2d', { willReadFrequently: true });
+    const placeholder = document.getElementById('placeholder');
+    const statusEl    = document.getElementById('status');
+    const resultCard  = document.getElementById('resultCard');
+    const resultHead  = document.getElementById('result-heading');
+    const linkBlock   = document.getElementById('linkBlock');
+    const siteNameEl  = document.getElementById('siteName');
+    const warningsEl  = document.getElementById('warnings');
+    const safeNote    = document.getElementById('safeNote');
+    const rawTextEl   = document.getElementById('rawText');
+    const openBtn     = document.getElementById('openBtn');
+    const copyBtn     = document.getElementById('copyBtn');
+    // v1.1 - history list pieces
+    const historyList  = document.getElementById('historyList');
+    const historyEmpty = document.getElementById('historyEmpty');
+    const historyCount = document.getElementById('historyCount');
+    let scanCount = 0; // how many codes have been scanned since the page opened
+
+    // These remember what's going on right now.
+    let stream = null;        // the live camera feed (null when off)
+    let animationId = null;   // the id of the repeating "look for a code" loop
+    let currentUrl = null;    // the link found in the code, if it is a web link
+    let currentText = '';     // the full text found in the code
+
+    // Well-known link shorteners. These hide the real destination,
+    // so we warn about them.
+    const SHORTENERS = [
+      'bit.ly', 'bitly.com', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd',
+      'buff.ly', 'rebrand.ly', 'cutt.ly', 'shorturl.at', 'tiny.cc', 'rb.gy',
+      'bl.ink', 's.id', 't.ly', 'v.gd', 'lnkd.in', 'qrco.de', 'tr.ee',
+      'shorte.st', 'adf.ly', 'soo.gd', 'clck.ru', 'urlz.fr', 'x.gd'
+    ];
+
+    // ------------------------------------------------------------
+    // 2. Small helper to show a message in the status line.
+    //    If isError is true, the message is shown in red.
+    // ------------------------------------------------------------
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle('error', isError);
+    }
+
+    // ------------------------------------------------------------
+    // 3. Make sure the jsQR library actually loaded. If the internet
+    //    is down or the CDN is blocked, scanning can't work, so we say so.
+    // ------------------------------------------------------------
+    if (typeof jsQR !== 'function') {
+      setStatus('The QR reading library could not load. Check your internet connection and reload the page.', true);
+      startBtn.disabled = true;
+      pictureBtn.disabled = true;
+    }
+
+    // ------------------------------------------------------------
+    // 4. Start the camera.
+    //    We ask for the "environment" camera, which is the back camera
+    //    on phones. Laptops only have one camera, so they use that.
+    // ------------------------------------------------------------
+    async function startCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setStatus('This browser can\'t use the camera here. The camera needs the page to be on https. Try "Scan a picture instead".', true);
+        return;
+      }
+      hideResult();
+      setStatus('Asking for camera permission…');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+      } catch (err) {
+        // Explain the most common reasons in plain words.
+        if (err.name === 'NotAllowedError') {
+          setStatus('Camera permission was denied. You can allow it in your browser settings, or scan a picture instead.', true);
+        } else if (err.name === 'NotFoundError') {
+          setStatus('No camera was found on this device. Try "Scan a picture instead".', true);
+        } else {
+          setStatus('The camera could not start (' + err.name + '). Try "Scan a picture instead".', true);
+        }
+        stream = null;
+        return;
+      }
+
+      // Hook the camera feed up to the hidden video element and play it.
+      video.srcObject = stream;
+      await video.play();
+
+      // Show the canvas (where we draw each frame) and swap button states.
+      placeholder.classList.add('hidden');
+      canvas.classList.remove('hidden');
+      canvas.setAttribute('aria-label', 'Live camera view, looking for a QR code');
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      setStatus('Camera on. Hold a QR code inside the picture.');
+
+      // Begin checking frames for a QR code.
+      animationId = requestAnimationFrame(scanFrame);
+    }
+
+    // ------------------------------------------------------------
+    // 5. Stop the camera.
+    //    This turns off every camera track so the camera light goes off,
+    //    and stops the scanning loop.
+    // ------------------------------------------------------------
+    function stopCamera(message) {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      if (message) setStatus(message);
+    }
+
+    // ------------------------------------------------------------
+    // 6. The scanning loop.
+    //    About 60 times a second: copy the current camera picture onto
+    //    the canvas, read its pixels, and ask jsQR if there's a code.
+    //    When one is found, draw a box, turn the camera off, show result.
+    // ------------------------------------------------------------
+    function scanFrame() {
+      if (!stream) return;
+
+      // Wait until the video has real picture data.
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        // Keep the canvas the same shape as the camera picture,
+        // but no wider than 1280 pixels so scanning stays fast.
+        const scale = Math.min(1, 1280 / video.videoWidth);
+        const w = Math.round(video.videoWidth * scale);
+        const h = Math.round(video.videoHeight * scale);
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+
+        ctx.drawImage(video, 0, 0, w, h);
+        const imageData = ctx.getImageData(0, 0, w, h);
+
+        // "dontInvert" skips looking for light-on-dark codes, which keeps
+        // the live camera fast. Pictures use the slower, thorough mode.
+        const code = jsQR(imageData.data, w, h, { inversionAttempts: 'dontInvert' });
+
+        if (code && code.data !== '') {
+          drawBox(code.location);
+          stopCamera();
+          canvas.setAttribute('aria-label', 'Camera picture with the found QR code outlined');
+          showResult(code.data);
+          return;
+        }
+      }
+      animationId = requestAnimationFrame(scanFrame);
+    }
+
+    // ------------------------------------------------------------
+    // 7. Draw a box around the QR code.
+    //    jsQR gives us the four corners of the code; we join them up
+    //    with a thick green line (plus a dark edge so it shows on any
+    //    background). Line thickness grows with the picture size.
+    // ------------------------------------------------------------
+    function drawBox(loc) {
+      const corners = [loc.topLeftCorner, loc.topRightCorner, loc.bottomRightCorner, loc.bottomLeftCorner];
+      const thickness = Math.max(4, Math.round(canvas.width / 150));
+
+      function tracePath() {
+        ctx.beginPath();
+        ctx.moveTo(corners[0].x, corners[0].y);
+        for (let i = 1; i < corners.length; i++) ctx.lineTo(corners[i].x, corners[i].y);
+        ctx.closePath();
+      }
+
+      ctx.lineJoin = 'round';
+      // Dark outline underneath
+      tracePath();
+      ctx.lineWidth = thickness + 4;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.stroke();
+      // Bright green line on top
+      tracePath();
+      ctx.lineWidth = thickness;
+      ctx.strokeStyle = '#2ee66b';
+      ctx.stroke();
+    }
+
+    // ------------------------------------------------------------
+    // 8. Scan a picture (from the file picker or a pasted screenshot).
+    //    We load the image, draw it on the canvas (shrunk if it's huge),
+    //    then ask jsQR to look for a code, trying both normal and
+    //    inverted (light-on-dark) colors.
+    // ------------------------------------------------------------
+    function scanPicture(file) {
+      if (!file || !file.type.startsWith('image/')) {
+        setStatus('That file isn\'t a picture. Please choose an image file.', true);
+        return;
+      }
+      stopCamera();
+      hideResult();
+      setStatus('Looking for a QR code in your picture…');
+
+      // Make a temporary, local-only address for the file so an <img> can read it.
+      const localUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = () => {
+        // Shrink very large pictures so scanning doesn't freeze the page.
+        const scale = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+        canvas.width = Math.round(img.naturalWidth * scale);
+        canvas.height = Math.round(img.naturalHeight * scale);
+
+        // Paint a white background first, so see-through screenshots
+        // don't turn black and hide the code.
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(localUrl); // free the temporary address
+
+        placeholder.classList.add('hidden');
+        canvas.classList.remove('hidden');
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, canvas.width, canvas.height, { inversionAttempts: 'attemptBoth' });
+
+        if (code && code.data !== '') {
+          drawBox(code.location);
+          canvas.setAttribute('aria-label', 'Your picture with the found QR code outlined');
+          showResult(code.data);
+        } else {
+          canvas.setAttribute('aria-label', 'Your picture. No QR code was found in it.');
+          setStatus('No QR code found in that picture. Try a clearer or closer picture of the code.', true);
+        }
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(localUrl);
+        setStatus('That picture couldn\'t be opened. Try a PNG or JPG file.', true);
+      };
+
+      img.src = localUrl;
+    }
+
+    // ------------------------------------------------------------
+    // 9. Work out whether the text is a web link, and if so,
+    //    collect any warning signs about it.
+    //    Returns null for plain text, or { url, warnings } for links.
+    // ------------------------------------------------------------
+    function inspectLink(text) {
+      const trimmed = text.trim();
+      let url;
+      try {
+        url = new URL(trimmed);
+      } catch {
+        return null; // not a link at all - just text
+      }
+      // Only http and https are web pages. Things like mailto:, tel:,
+      // or WIFI: are shown as plain text and never opened.
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+
+      const warnings = [];
+      const host = url.hostname.toLowerCase();
+
+      // Not https: the connection isn't encrypted, so others could
+      // see or change what you send and receive.
+      if (url.protocol !== 'https:') {
+        warnings.push('This link is not secure (it uses http, not https). Information you send could be seen or changed by others.');
+      }
+
+      // Link shortener: you can't see where it really goes.
+      const isShortener = SHORTENERS.some(s => host === s || host.endsWith('.' + s));
+      if (isShortener) {
+        warnings.push('This is a link shortener (' + host + '). It hides the real website it leads to.');
+      }
+
+      // A username before "@" can disguise the real site,
+      // e.g. https://mybank.com@bad-site.com really goes to bad-site.com.
+      if (url.username || url.password) {
+        warnings.push('This link has hidden text before an "@" sign, a trick used to disguise the real website. The real site is the name shown above.');
+      }
+
+      // "xn--" means the name uses special international letters,
+      // which can look exactly like a familiar site name.
+      if (host.split('.').some(part => part.startsWith('xn--'))) {
+        warnings.push('This website name uses special international characters, which can be used to imitate familiar sites.');
+      }
+
+      // A raw number address instead of a name is unusual for real sites.
+      if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[')) {
+        warnings.push('This link uses a number address instead of a website name, which is unusual for trustworthy sites.');
+      }
+
+      return { url, warnings };
+    }
+
+    // ------------------------------------------------------------
+    // 10. Show the result.
+    //     The exact text always appears as plain text (textContent,
+    //     never HTML), so nothing in the code can run or change the page.
+    //     For web links we show the site name big, list warnings, and
+    //     reveal an "Open this link" button. Nothing opens by itself.
+    // ------------------------------------------------------------
+    function showResult(text) {
+      currentText = text;
+      rawTextEl.textContent = text;
+      warningsEl.innerHTML = '';
+
+      const link = inspectLink(text);
+      if (link) {
+        currentUrl = link.url.href;
+        siteNameEl.textContent = link.url.hostname;
+        link.warnings.forEach(message => {
+          const li = document.createElement('li');
+          li.textContent = '⚠️ ' + message;
+          warningsEl.appendChild(li);
+        });
+        warningsEl.classList.toggle('hidden', link.warnings.length === 0);
+        safeNote.classList.toggle('hidden', link.warnings.length > 0);
+        linkBlock.classList.remove('hidden');
+        openBtn.classList.remove('hidden');
+        openBtn.setAttribute('aria-label', 'Open this link: ' + link.url.hostname + ', in a new tab');
+        setStatus('QR code found: a link to ' + link.url.hostname +
+          (link.warnings.length ? '. There ' + (link.warnings.length === 1 ? 'is 1 warning.' : 'are ' + link.warnings.length + ' warnings.') : '.'));
+      } else {
+        currentUrl = null;
+        linkBlock.classList.add('hidden');
+        openBtn.classList.add('hidden');
+        setStatus('QR code found. It contains text, not a web link.');
+      }
+
+      // v1.1 - also add this scan to the top of the session list
+      addToHistory(text, link);
+
+      resultCard.classList.remove('hidden');
+      // Move keyboard focus to the result so keyboard and screen reader
+      // users land right on it.
+      resultHead.focus();
+    }
+
+    // Hide the result card (used when starting a new scan).
+    function hideResult() {
+      resultCard.classList.add('hidden');
+      currentUrl = null;
+      currentText = '';
+    }
+
+    // ------------------------------------------------------------
+    // 10b. (v1.1) Add a scan to the "Scanned this session" list.
+    //      Each new entry goes at the TOP so the newest is first.
+    //      Every piece of text is set with textContent (never HTML),
+    //      so nothing inside a QR code can run on this page.
+    //      Links get the same careful treatment as the main result:
+    //      the site name in big letters, any warnings, and an Open
+    //      button that does nothing until you press it.
+    // ------------------------------------------------------------
+    function addToHistory(text, link) {
+      scanCount++;
+
+      const item = document.createElement('li');
+      item.className = 'history-item';
+
+      // When it was scanned, e.g. "#3 · 11:24 PM"
+      const time = document.createElement('p');
+      time.className = 'history-time';
+      time.textContent = '#' + scanCount + ' · ' +
+        new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      item.appendChild(time);
+
+      // For links: big site name plus any warnings
+      if (link) {
+        const site = document.createElement('p');
+        site.className = 'history-site';
+        site.textContent = link.url.hostname;
+        item.appendChild(site);
+
+        if (link.warnings.length) {
+          const warnList = document.createElement('ul');
+          warnList.className = 'warnings';
+          warnList.setAttribute('aria-label', 'Warnings about this link');
+          link.warnings.forEach(message => {
+            const li = document.createElement('li');
+            li.textContent = '⚠️ ' + message;
+            warnList.appendChild(li);
+          });
+          item.appendChild(warnList);
+        }
+      }
+
+      // The exact text, shown as plain text
+      const raw = document.createElement('pre');
+      raw.className = 'raw';
+      raw.textContent = text;
+      item.appendChild(raw);
+
+      // Buttons: Open (links only) and Copy
+      const buttons = document.createElement('div');
+      buttons.className = 'buttons';
+
+      if (link) {
+        const href = link.url.href; // remember this entry's own link
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.textContent = 'Open this link';
+        open.setAttribute('aria-label', 'Open this link: ' + link.url.hostname + ', in a new tab');
+        open.addEventListener('click', () => {
+          window.open(href, '_blank', 'noopener,noreferrer');
+        });
+        buttons.appendChild(open);
+      }
+
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'secondary';
+      copy.textContent = 'Copy';
+      copy.setAttribute('aria-label', 'Copy scan number ' + scanCount);
+      copy.addEventListener('click', () => copyText(text));
+      buttons.appendChild(copy);
+
+      item.appendChild(buttons);
+
+      // Put the newest entry first, and update the count and empty note
+      historyList.prepend(item);
+      historyEmpty.classList.add('hidden');
+      historyCount.textContent = '(' + scanCount + ')';
+    }
+
+    // (v1.1) Shared copy helper used by every Copy button.
+    // The text goes to your clipboard only; nothing leaves your device.
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus('Copied to your clipboard.');
+      } catch {
+        setStatus('Copying isn\'t allowed here. You can select the text and copy it yourself.', true);
+      }
+    }
+
+    // ------------------------------------------------------------
+    // 11. Button actions.
+    // ------------------------------------------------------------
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', () => stopCamera('Camera off.'));
+
+    // "Scan a picture instead" opens the hidden file picker.
+    pictureBtn.addEventListener('click', () => {
+      fileInput.value = ''; // so choosing the same file twice still works
+      fileInput.click();
+    });
+    fileInput.addEventListener('change', () => scanPicture(fileInput.files[0]));
+
+    // Open the link ONLY when this button is pressed. "noopener" and
+    // "noreferrer" stop the new site from controlling or learning about
+    // this page.
+    openBtn.addEventListener('click', () => {
+      if (!currentUrl) return;
+      window.open(currentUrl, '_blank', 'noopener,noreferrer');
+    });
+
+    // Copy the exact text to the clipboard (stays on your device).
+    copyBtn.addEventListener('click', () => copyText(currentText));
+
+    // ------------------------------------------------------------
+    // 12. Paste a screenshot with Ctrl+V / ⌘+V anywhere on the page.
+    // ------------------------------------------------------------
+    document.addEventListener('paste', event => {
+      const items = event.clipboardData ? event.clipboardData.items : [];
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          event.preventDefault();
+          scanPicture(item.getAsFile());
+          return;
+        }
+      }
+    });
+
+    // ------------------------------------------------------------
+    // 13. If you switch tabs or lock your phone while the camera is on,
+    //     turn it off to protect your privacy and save battery.
+    // ------------------------------------------------------------
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && stream) stopCamera('Camera turned off because you left the page.');
+    });
+  </script>
+</body>
+</html>
