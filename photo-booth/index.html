@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<!--
+  PHOTO BOOTH
+  ===========
+  A camera photo booth that runs entirely in your browser.
+
+  LIBRARIES USED
+  --------------
+  None. Everything is plain HTML, CSS and vanilla JavaScript.
+
+  PRIVACY
+  -------
+  The camera picture never leaves your computer. Nothing is uploaded or
+  sent to any server. The photo strip is built and downloaded locally.
+
+  VERSION HISTORY
+  ---------------
+  v1.0 - 2026-11-01 - Initial build: start/stop camera, mirrored canvas,
+                      five pixel filters, 4-photo countdown with flash,
+                      tall photo strip PNG download, camera-blocked help.
+  v1.1 - 2026-11-01 - Added "Night vision" filter (green glow, grain,
+                      scan lines, dark round edges like goggles).
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Photo Booth</title>
+  <style>
+    /* ---------- Colors and basic page look ---------- */
+    :root {
+      --bg: #1d1a2b;
+      --panel: #2a2640;
+      --text: #f6f3ff;
+      --muted: #c9c3e0;
+      --accent: #ff4f8b;
+      --accent-dark: #c92a63;
+      --focus: #ffd84d;
+      --ok: #5be3a4;
+      --error-bg: #4a1f2c;
+      --error-border: #ff7a9c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    h1 {
+      margin: 8px 0 4px;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      letter-spacing: 0.02em;
+    }
+
+    .intro { margin: 0 0 16px; color: var(--muted); }
+
+    /* Two-column layout on wide screens, one column on phones */
+    .layout {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 900px) {
+      .layout { grid-template-columns: 2fr 1fr; }
+    }
+
+    .panel {
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    h2 { margin: 0 0 12px; font-size: 1.2rem; }
+
+    /* ---------- The camera "stage" ---------- */
+    .stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #viewCanvas {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 16px;
+      color: var(--muted);
+      font-size: 1.1rem;
+    }
+
+    /* The big 3, 2, 1 numbers */
+    .countdown {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(6rem, 25vw, 14rem);
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 0 24px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+    }
+    .countdown.pop { animation: pop 0.9s ease-out; }
+    @keyframes pop {
+      from { transform: scale(1.6); opacity: 0; }
+      30%  { transform: scale(1);   opacity: 1; }
+      to   { transform: scale(0.9); opacity: 0.85; }
+    }
+
+    /* White flash when a photo is taken */
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .flash.go { animation: flash 0.35s ease-out; }
+    @keyframes flash {
+      from { opacity: 1; }
+      to   { opacity: 0; }
+    }
+
+    /* Respect "reduce motion" for the countdown animation too */
+    @media (prefers-reduced-motion: reduce) {
+      .countdown.pop { animation: none; }
+    }
+
+    /* Small "Photo 2 of 4" badge */
+    .shot-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.95rem;
+    }
+
+    /* ---------- Buttons ---------- */
+    .controls, .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button, .button-link {
+      font: inherit;
+      font-weight: 600;
+      border: 2px solid transparent;
+      border-radius: 10px;
+      padding: 10px 16px;
+      min-height: 44px; /* comfortable tap size on phones */
+      cursor: pointer;
+      background: #3d3760;
+      color: var(--text);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button:hover:not(:disabled), .button-link:hover { background: #4c4578; }
+
+    button.primary, .button-link.primary { background: var(--accent); color: #fff; }
+    button.primary:hover:not(:disabled), .button-link.primary:hover { background: var(--accent-dark); }
+
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Very visible keyboard focus ring */
+    button:focus-visible, .button-link:focus-visible, a:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    /* Filter buttons show which one is chosen */
+    .filters button[aria-pressed="true"] {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--focus);
+    }
+
+    fieldset { border: none; padding: 0; margin: 14px 0 0; }
+    legend { font-weight: 600; padding: 0; }
+
+    /* ---------- Messages ---------- */
+    .status { margin: 12px 0 0; color: var(--muted); min-height: 1.5em; }
+
+    .error-box {
+      margin-top: 14px;
+      background: var(--error-bg);
+      border: 2px solid var(--error-border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .error-box h3 { margin: 0 0 6px; font-size: 1.05rem; }
+    .error-box ol { margin: 6px 0 0; padding-left: 1.3em; }
+
+    /* ---------- Photo strip result ---------- */
+    .strip-wrap { text-align: center; }
+    #stripImage {
+      max-width: 100%;
+      max-height: 70vh;
+      height: auto;
+      border-radius: 6px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+    }
+    .strip-empty { color: var(--muted); }
+
+    /* Text only screen readers hear */
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>📸 Photo Booth</h1>
+      <p class="intro">Start the camera, pick a filter, and take a strip of four photos. Everything stays on your computer.</p>
+    </header>
+
+    <div class="layout">
+      <!-- LEFT: camera and controls -->
+      <section class="panel" aria-labelledby="camera-heading">
+        <h2 id="camera-heading">Camera</h2>
+
+        <div class="stage">
+          <!-- The canvas is where the mirrored, filtered camera picture is drawn -->
+          <canvas id="viewCanvas" role="img" aria-label="Live camera preview, shown like a mirror"></canvas>
+          <div class="placeholder" id="placeholder">Camera is off. Press “Start camera” to begin.</div>
+          <div class="shot-badge" id="shotBadge" hidden></div>
+          <div class="countdown" id="countdown" aria-hidden="true"></div>
+          <div class="flash" id="flash" aria-hidden="true"></div>
+        </div>
+
+        <!-- The hidden video element receives the raw camera feed -->
+        <video id="video" playsinline muted hidden></video>
+
+        <div class="controls">
+          <button type="button" id="startBtn" class="primary">Start camera</button>
+          <button type="button" id="stopBtn" disabled>Stop camera</button>
+          <button type="button" id="shootBtn" class="primary" disabled>Take 4 photos</button>
+        </div>
+
+        <fieldset>
+          <legend>Filter</legend>
+          <div class="filters" id="filters">
+            <button type="button" data-filter="none" aria-pressed="true">None</button>
+            <button type="button" data-filter="bw" aria-pressed="false">Black &amp; white</button>
+            <button type="button" data-filter="old" aria-pressed="false">Old photo</button>
+            <button type="button" data-filter="pop" aria-pressed="false">Pop art</button>
+            <button type="button" data-filter="negative" aria-pressed="false">Negative</button>
+            <button type="button" data-filter="night" aria-pressed="false">Night vision</button>
+          </div>
+        </fieldset>
+
+        <!-- Everyday messages (polite) -->
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+
+        <!-- Countdown announcements for screen readers (assertive so they are heard right away) -->
+        <div class="visually-hidden" id="announcer" aria-live="assertive" aria-atomic="true"></div>
+
+        <!-- Shown when the camera can't be used, with steps to fix it -->
+        <div class="error-box" id="errorBox" role="alert" hidden></div>
+      </section>
+
+      <!-- RIGHT: finished photo strip -->
+      <section class="panel" aria-labelledby="strip-heading">
+        <h2 id="strip-heading">Your photo strip</h2>
+        <div class="strip-wrap">
+          <p class="strip-empty" id="stripEmpty">Your four photos will appear here as a strip.</p>
+          <img id="stripImage" alt="" hidden>
+          <div class="controls" style="justify-content:center">
+            <a id="downloadLink" class="button-link primary" href="#" download="photo-strip.png" hidden>Download PNG</a>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    // v1.0 - initial build
+    // v1.1 - added "Night vision" filter
+
+    /* =====================================================================
+       FINDING THE PIECES OF THE PAGE
+       Grab every element we need once, so the rest of the code can use them.
+       ===================================================================== */
+    const video        = document.getElementById('video');
+    const viewCanvas   = document.getElementById('viewCanvas');
+    // "willReadFrequently" tells the browser we will read pixels every frame,
+    // which makes reading them much faster.
+    const viewCtx      = viewCanvas.getContext('2d', { willReadFrequently: true });
+    const placeholder  = document.getElementById('placeholder');
+    const startBtn     = document.getElementById('startBtn');
+    const stopBtn      = document.getElementById('stopBtn');
+    const shootBtn     = document.getElementById('shootBtn');
+    const filterBox    = document.getElementById('filters');
+    const statusEl     = document.getElementById('status');
+    const announcer    = document.getElementById('announcer');
+    const errorBox     = document.getElementById('errorBox');
+    const countdownEl  = document.getElementById('countdown');
+    const flashEl      = document.getElementById('flash');
+    const shotBadge    = document.getElementById('shotBadge');
+    const stripImage   = document.getElementById('stripImage');
+    const stripEmpty   = document.getElementById('stripEmpty');
+    const downloadLink = document.getElementById('downloadLink');
+
+    /* =====================================================================
+       THE APP'S MEMORY ("state")
+       Simple variables that remember what is going on right now.
+       ===================================================================== */
+    let stream = null;          // the live camera connection (null when off)
+    let animationId = null;     // id of the drawing loop, so we can stop it
+    let currentFilter = 'none'; // which filter button is chosen
+    let isShooting = false;     // true while the 4-photo countdown is running
+    let stripUrl = null;        // address of the latest strip image in memory
+    let vignette = null;        // pre-calculated darkening for "Old photo" edges
+    let vignetteSize = '';      // canvas size the vignette was made for
+
+    // The biggest width we process. Changing every pixel 30+ times a second is
+    // hard work, so keeping the picture a sensible size keeps it smooth.
+    const MAX_WIDTH = 800;
+
+    /* =====================================================================
+       SMALL HELPERS
+       ===================================================================== */
+
+    // Wait a number of milliseconds (used for the countdown timing).
+    function wait(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Show an everyday message under the buttons.
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    // Say something to screen reader users. We clear the text first so the
+    // same words (for example "1" in two different photos) are read again.
+    function announce(message) {
+      announcer.textContent = '';
+      setTimeout(() => { announcer.textContent = message; }, 50);
+    }
+
+    // Does the computer ask websites to keep animations to a minimum?
+    function prefersReducedMotion() {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    // Turn buttons on or off depending on whether the camera is running
+    // and whether photos are being taken.
+    function updateButtons() {
+      const cameraOn = stream !== null;
+      startBtn.disabled = cameraOn;
+      stopBtn.disabled  = !cameraOn;
+      shootBtn.disabled = !cameraOn || isShooting;
+    }
+
+    /* =====================================================================
+       CAMERA PROBLEMS
+       If the camera can't start, explain why and how to fix it, instead
+       of silently doing nothing.
+       ===================================================================== */
+    function showCameraError(error) {
+      let html;
+
+      if (error && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) {
+        // The person (or the browser settings) said "no" to the camera.
+        html = `
+          <h3>Camera access is blocked</h3>
+          <p>The photo booth needs permission to use your camera. To turn it back on:</p>
+          <ol>
+            <li>Click the camera icon or the lock/settings icon at the left end of the address bar.</li>
+            <li>Find <strong>Camera</strong> and change it to <strong>Allow</strong>.</li>
+            <li>Reload this page, then press <strong>Start camera</strong> again.</li>
+          </ol>
+          <p>On a phone, you may also need to allow the camera for your browser in your phone’s Settings app (under Privacy or Apps).</p>`;
+      } else if (error && (error.name === 'NotFoundError' || error.name === 'OverconstrainedError')) {
+        html = `
+          <h3>No camera found</h3>
+          <p>Plug in or turn on a camera, then press <strong>Start camera</strong> again.</p>`;
+      } else if (error && error.name === 'NotReadableError') {
+        html = `
+          <h3>The camera is busy</h3>
+          <p>Another app or browser tab may be using it. Close the other app (for example a video call), then press <strong>Start camera</strong> again.</p>`;
+      } else if (error && error.name === 'NoMediaDevices') {
+        html = `
+          <h3>This browser can’t use the camera here</h3>
+          <p>Try opening the page in an up-to-date Chrome, Edge, Firefox or Safari. Cameras only work on pages opened from a secure address (https://) or directly from your computer.</p>`;
+      } else {
+        html = `
+          <h3>The camera couldn’t start</h3>
+          <p>Something went wrong (${error && error.name ? error.name : 'unknown problem'}). Try reloading the page and pressing <strong>Start camera</strong> again.</p>`;
+      }
+
+      errorBox.innerHTML = html;
+      errorBox.hidden = false;
+    }
+
+    function hideCameraError() {
+      errorBox.hidden = true;
+      errorBox.innerHTML = '';
+    }
+
+    /* =====================================================================
+       STARTING THE CAMERA
+       Only happens when the "Start camera" button is pressed.
+       ===================================================================== */
+    async function startCamera() {
+      hideCameraError();
+
+      // Very old browsers (or insecure pages) don't offer camera access at all.
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showCameraError({ name: 'NoMediaDevices' });
+        return;
+      }
+
+      setStatus('Asking for camera permission…');
+      startBtn.disabled = true;
+
+      try {
+        // Ask for the front ("user") camera at a reasonable size. No sound.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false
+        });
+      } catch (error) {
+        stream = null;
+        setStatus('');
+        showCameraError(error);
+        updateButtons();
+        return;
+      }
+
+      // Feed the camera into the hidden video element and wait until it plays.
+      video.srcObject = stream;
+      await video.play();
+
+      // Make the canvas match the camera's shape (but not too big).
+      const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
+      viewCanvas.width  = Math.round(video.videoWidth * scale);
+      viewCanvas.height = Math.round(video.videoHeight * scale);
+
+      placeholder.hidden = true;
+      setStatus('Camera is on.');
+      updateButtons();
+
+      // If the camera is unplugged or turned off by the system, tidy up.
+      stream.getVideoTracks().forEach(track => {
+        track.addEventListener('ended', () => stopCamera('The camera was disconnected.'));
+      });
+
+      // Start drawing frames.
+      drawLoop();
+    }
+
+    /* =====================================================================
+       STOPPING THE CAMERA
+       Stopping every "track" fully releases the camera, so its light goes off.
+       ===================================================================== */
+    function stopCamera(message) {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      stream = null;
+      video.srcObject = null;
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      // Cancel any photo countdown that was running.
+      isShooting = false;
+      countdownEl.textContent = '';
+      shotBadge.hidden = true;
+
+      // Blank the canvas and show the "camera is off" message again.
+      viewCtx.clearRect(0, 0, viewCanvas.width, viewCanvas.height);
+      placeholder.hidden = false;
+
+      setStatus(typeof message === 'string' ? message : 'Camera is off.');
+      updateButtons();
+    }
+
+    /* =====================================================================
+       THE DRAWING LOOP
+       Many times a second: copy the camera picture onto the canvas flipped
+       left-to-right (like a mirror), then change its pixels for the filter.
+       ===================================================================== */
+    function drawLoop() {
+      if (!stream) return;
+
+      const w = viewCanvas.width;
+      const h = viewCanvas.height;
+
+      // Flip horizontally: move to the right edge, then draw "backwards".
+      viewCtx.save();
+      viewCtx.translate(w, 0);
+      viewCtx.scale(-1, 1);
+      viewCtx.drawImage(video, 0, 0, w, h);
+      viewCtx.restore();
+
+      // Apply the chosen filter by editing the pixels directly.
+      if (currentFilter !== 'none') {
+        const frame = viewCtx.getImageData(0, 0, w, h);
+        applyFilter(frame, currentFilter);
+        viewCtx.putImageData(frame, 0, 0);
+      }
+
+      // Ask the browser to call us again before the next screen refresh.
+      animationId = requestAnimationFrame(drawLoop);
+    }
+
+    /* =====================================================================
+       PIXEL FILTERS
+       A picture is a long list of numbers: for each pixel there are four
+       values in a row - red, green, blue, and alpha (see-through-ness),
+       each from 0 to 255. These filters do maths on those numbers.
+       ===================================================================== */
+    function applyFilter(imageData, filter) {
+      const data = imageData.data;
+      const len = data.length;
+
+      if (filter === 'bw') {
+        // BLACK & WHITE: replace each color with its brightness.
+        // Green counts most because our eyes are most sensitive to it.
+        for (let i = 0; i < len; i += 4) {
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+
+      } else if (filter === 'old') {
+        // OLD PHOTO: warm brown "sepia" tones, darker corners, and a little
+        // film grain (random speckle).
+        const map = getVignette(imageData.width, imageData.height);
+        for (let i = 0, p = 0; i < len; i += 4, p++) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          // The classic sepia recipe mixes the three colors into brownish tones.
+          let sr = 0.393 * r + 0.769 * g + 0.189 * b;
+          let sg = 0.349 * r + 0.686 * g + 0.168 * b;
+          let sb = 0.272 * r + 0.534 * g + 0.131 * b;
+          // Fade it slightly so it looks aged, not too contrasty.
+          sr = sr * 0.85 + 25; sg = sg * 0.85 + 20; sb = sb * 0.85 + 10;
+          // Darken toward the edges using the pre-made vignette map.
+          const v = map[p];
+          // Add grain: a small random lightening or darkening.
+          const grain = (Math.random() - 0.5) * 24;
+          data[i]     = sr * v + grain; // values above 255 are clipped automatically
+          data[i + 1] = sg * v + grain;
+          data[i + 2] = sb * v + grain;
+        }
+
+      } else if (filter === 'pop') {
+        // POP ART: sort every pixel into one of four bold flat colors based
+        // on how bright it is - like a screen-printed poster.
+        const palette = [
+          [32, 26, 110],   // darkest parts → deep blue
+          [235, 40, 140],  // dark-mid → hot pink
+          [255, 205, 0],   // light-mid → sunny yellow
+          [255, 250, 235]  // brightest → cream
+        ];
+        for (let i = 0; i < len; i += 4) {
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          // Brightness 0-255 split into four bands (0, 1, 2, 3).
+          const band = gray < 70 ? 0 : gray < 120 ? 1 : gray < 175 ? 2 : 3;
+          const c = palette[band];
+          data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2];
+        }
+
+      } else if (filter === 'negative') {
+        // NEGATIVE: flip every color to its opposite (black ↔ white).
+        for (let i = 0; i < len; i += 4) {
+          data[i]     = 255 - data[i];
+          data[i + 1] = 255 - data[i + 1];
+          data[i + 2] = 255 - data[i + 2];
+        }
+
+      } else if (filter === 'night') {
+        // NIGHT VISION: make everything shades of glowing green on black,
+        // like looking through night vision goggles.
+        const w = imageData.width;
+        const map = getVignette(w, imageData.height);
+        for (let i = 0, p = 0; i < len; i += 4, p++) {
+          // 1. Work out how bright the pixel is (0 to 1).
+          let light = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+          // 2. Boost the dark areas, the way goggles amplify faint light.
+          light = Math.pow(light, 0.6);
+          // 3. Add heavy speckle "noise" - real night vision is very grainy.
+          light += (Math.random() - 0.5) * 0.22;
+          // 4. Thin dark scan lines: every other row is a bit dimmer.
+          const row = Math.floor(p / w);
+          if (row % 2 === 0) light *= 0.82;
+          // 5. Darken the edges extra hard so it looks like a round eyepiece.
+          const v = map[p];
+          light *= v * v;
+          // 6. Paint it green: lots of green, a little red and blue so the
+          //    brightest spots glow a pale, almost white green.
+          data[i]     = light * 90;
+          data[i + 1] = light * 255;
+          data[i + 2] = light * 70;
+        }
+      }
+    }
+
+    // Build (once per canvas size) a list of numbers between about 0.35 and 1
+    // that say how much to darken each pixel. Center = 1 (no change),
+    // corners = darker. Doing this once saves lots of work every frame.
+    function getVignette(w, h) {
+      const key = w + 'x' + h;
+      if (vignette && vignetteSize === key) return vignette;
+
+      vignette = new Float32Array(w * h);
+      const cx = w / 2, cy = h / 2;
+      const maxDist = Math.sqrt(cx * cx + cy * cy);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const dx = x - cx, dy = y - cy;
+          const d = Math.sqrt(dx * dx + dy * dy) / maxDist; // 0 center → 1 corner
+          vignette[y * w + x] = 1 - 0.65 * Math.pow(d, 2.2);
+        }
+      }
+      vignetteSize = key;
+      return vignette;
+    }
+
+    /* =====================================================================
+       CHOOSING A FILTER
+       One click handler for the whole group of filter buttons.
+       aria-pressed tells screen readers which one is switched on.
+       ===================================================================== */
+    filterBox.addEventListener('click', event => {
+      const button = event.target.closest('button[data-filter]');
+      if (!button) return;
+
+      currentFilter = button.dataset.filter;
+      filterBox.querySelectorAll('button').forEach(b => {
+        b.setAttribute('aria-pressed', b === button ? 'true' : 'false');
+      });
+      setStatus(`Filter: ${button.textContent}.`);
+    });
+
+    /* =====================================================================
+       TAKING FOUR PHOTOS
+       For each photo: big 3-2-1 countdown (also announced), a white flash
+       (unless reduced motion is on), then save a copy of the canvas.
+       ===================================================================== */
+    async function takeFourPhotos() {
+      if (!stream || isShooting) return;
+      isShooting = true;
+      updateButtons();
+
+      const photos = [];
+      announce('Get ready. Taking four photos.');
+      await wait(1200);
+
+      for (let shot = 1; shot <= 4; shot++) {
+        // If the camera was stopped mid-way, give up quietly.
+        if (!isShooting || !stream) return;
+
+        shotBadge.textContent = `Photo ${shot} of 4`;
+        shotBadge.hidden = false;
+
+        // The countdown: 3… 2… 1…
+        for (let n = 3; n >= 1; n--) {
+          if (!isShooting || !stream) return;
+          showCountdownNumber(n);
+          announce(n === 3 ? `Photo ${shot}. ${n}` : String(n));
+          await wait(1000);
+        }
+        countdownEl.textContent = '';
+        if (!isShooting || !stream) return;
+
+        // Snap! Copy whatever is on the canvas right now (already mirrored
+        // and filtered) into its own little canvas.
+        const snap = document.createElement('canvas');
+        snap.width = viewCanvas.width;
+        snap.height = viewCanvas.height;
+        snap.getContext('2d').drawImage(viewCanvas, 0, 0);
+        photos.push(snap);
+
+        doFlash();
+        announce(`Photo ${shot} taken.`);
+        await wait(900); // short breather before the next countdown
+      }
+
+      shotBadge.hidden = true;
+      isShooting = false;
+      updateButtons();
+
+      buildStrip(photos);
+    }
+
+    // Show one countdown number and restart its little "pop" animation.
+    function showCountdownNumber(n) {
+      countdownEl.textContent = n;
+      countdownEl.classList.remove('pop');
+      void countdownEl.offsetWidth; // forces the browser to restart the animation
+      countdownEl.classList.add('pop');
+    }
+
+    // The white camera flash - skipped when the computer asks for less motion.
+    function doFlash() {
+      if (prefersReducedMotion()) return;
+      flashEl.classList.remove('go');
+      void flashEl.offsetWidth;
+      flashEl.classList.add('go');
+    }
+
+    /* =====================================================================
+       MAKING THE PHOTO STRIP
+       Stack the four photos in one tall image with a white border and a
+       date at the bottom, like a real photo booth strip.
+       ===================================================================== */
+    function buildStrip(photos) {
+      const photoW = 600;                                         // width of each photo in the strip
+      const photoH = Math.round(photoW * photos[0].height / photos[0].width);
+      const border = 36;                                          // white edge around everything
+      const gap = 24;                                             // space between photos
+      const footer = 110;                                         // space for the caption
+
+      const strip = document.createElement('canvas');
+      strip.width = photoW + border * 2;
+      strip.height = border + photos.length * photoH + (photos.length - 1) * gap + footer;
+      const ctx = strip.getContext('2d');
+
+      // Paper-white background.
+      ctx.fillStyle = '#fffdf8';
+      ctx.fillRect(0, 0, strip.width, strip.height);
+
+      // Draw each photo, one under another, with a thin gray outline.
+      photos.forEach((photo, index) => {
+        const y = border + index * (photoH + gap);
+        ctx.drawImage(photo, border, y, photoW, photoH);
+        ctx.strokeStyle = '#d8d2c4';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(border, y, photoW, photoH);
+      });
+
+      // Caption: "PHOTO BOOTH" and today's date.
+      const today = new Date();
+      const dateText = today.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+      const captionTop = strip.height - footer;
+      ctx.fillStyle = '#2a2640';
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 40px system-ui, sans-serif';
+      ctx.fillText('★ PHOTO BOOTH ★', strip.width / 2, captionTop + 52);
+      ctx.font = '26px system-ui, sans-serif';
+      ctx.fillStyle = '#6b6580';
+      ctx.fillText(dateText, strip.width / 2, captionTop + 88);
+
+      // Turn the canvas into a PNG file held in memory, then show it and
+      // hook it up to the download button.
+      strip.toBlob(blob => {
+        if (stripUrl) URL.revokeObjectURL(stripUrl); // free the old strip's memory
+        stripUrl = URL.createObjectURL(blob);
+
+        stripImage.src = stripUrl;
+        stripImage.alt = `Photo booth strip of four photos taken ${dateText}`;
+        stripImage.hidden = false;
+        stripEmpty.hidden = true;
+
+        // File name with date and time, e.g. photo-strip-2026-11-01-2230.png
+        const pad = num => String(num).padStart(2, '0');
+        const stamp = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}-${pad(today.getHours())}${pad(today.getMinutes())}`;
+        downloadLink.href = stripUrl;
+        downloadLink.download = `photo-strip-${stamp}.png`;
+        downloadLink.hidden = false;
+
+        setStatus('Your photo strip is ready to download.');
+        announce('All four photos taken. Your photo strip is ready. Use the Download PNG button to save it.');
+      }, 'image/png');
+    }
+
+    /* =====================================================================
+       CONNECTING THE BUTTONS
+       ===================================================================== */
+    startBtn.addEventListener('click', startCamera);
+    stopBtn.addEventListener('click', () => stopCamera());
+    shootBtn.addEventListener('click', takeFourPhotos);
+
+    // Release the camera if the page is closed or navigated away from.
+    window.addEventListener('pagehide', () => {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    });
+
+    // Set the starting button states.
+    updateButtons();
+  </script>
+</body>
+</html>
