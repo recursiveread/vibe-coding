@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<!--
+  Glowing Caterpillars
+  ====================
+  Click or tap to drop glowing caterpillars that crawl around the screen.
+  When two meet, they either bounce off each other or one crawls under the other.
+
+  LIBRARIES USED: none. Everything is plain HTML, CSS and vanilla JavaScript.
+  PRIVACY: nothing is sent to any server. Everything runs in your browser.
+
+  VERSION HISTORY
+  // v1.0 - 2026-11-01 - initial build: canvas animation, start screen, pause (button, P key,
+  //                     auto-pause on tab switch), mouse/touch/keyboard controls, 4 color modes,
+  //                     bounce-or-pass-under meetings, reduced-motion support, settings list.
+  // v1.1 - 2026-11-01 - added an on-screen Settings panel with sliders for speed, length and width.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Glowing Caterpillars</title>
+  <style>
+    :root {
+      --bg: #05060a;
+      --panel: rgba(16, 18, 28, 0.82);
+      --text: #eef0ff;
+      --muted: #a9adc8;
+      --accent: #7dffb0;
+      --focus: #ffe066;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    /* The drawing surface fills the whole window */
+    #stage {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: block;
+      touch-action: none;           /* taps add caterpillars instead of scrolling/zooming */
+      cursor: crosshair;
+    }
+    #stage:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+
+    /* Toolbar across the top */
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--panel);
+      backdrop-filter: blur(6px);
+      z-index: 2;
+    }
+    header h1 { font-size: 1rem; margin: 0 auto 0 0; font-weight: 600; }
+    button, select {
+      font: inherit;
+      font-size: 0.95rem;
+      color: var(--text);
+      background: #22263a;
+      border: 1px solid #3a3f5c;
+      border-radius: 0.5rem;
+      padding: 0.45rem 0.8rem;
+      min-height: 44px;             /* comfortable finger size */
+      cursor: pointer;
+    }
+    button:hover, select:hover { background: #2d3250; }
+    button:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    label { font-size: 0.9rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; }
+    #count { font-size: 0.9rem; color: var(--muted); min-width: 7ch; }
+
+    /* Start screen */
+    #start {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+      background: radial-gradient(circle at center, rgba(30, 60, 45, 0.6), rgba(5, 6, 10, 0.96));
+      z-index: 3;
+    }
+    #start[hidden] { display: none; }
+    .card {
+      max-width: 34rem;
+      background: var(--panel);
+      border: 1px solid #2c3150;
+      border-radius: 1rem;
+      padding: 1.5rem;
+      line-height: 1.5;
+    }
+    .card h2 { margin-top: 0; font-size: 1.6rem; color: var(--accent); }
+    .card ul { padding-left: 1.2rem; }
+    kbd {
+      background: #2a2f48;
+      border: 1px solid #454b70;
+      border-radius: 0.3rem;
+      padding: 0 0.35rem;
+      font-size: 0.85em;
+    }
+    #startBtn { font-size: 1.1rem; padding: 0.6rem 1.6rem; background: #1f5a3c; border-color: #3fae74; }
+    #startBtn:hover { background: #267049; }
+    #calmNote { color: var(--muted); font-size: 0.9rem; }
+
+    /* "Paused" badge */
+    #pausedBadge {
+      position: fixed;
+      left: 50%;
+      bottom: 1.5rem;
+      transform: translateX(-50%);
+      background: var(--panel);
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    #pausedBadge[hidden] { display: none; }
+
+    /* On-screen settings panel (v1.1) */
+    #settingsPanel {
+      position: fixed;
+      top: 4.5rem;
+      right: 0.75rem;
+      width: min(20rem, calc(100vw - 1.5rem));
+      background: var(--panel);
+      border: 1px solid #2c3150;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      z-index: 2;
+    }
+    #settingsPanel[hidden] { display: none; }
+    #settingsPanel h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+    .slider-row { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 0.5rem; margin-bottom: 0.9rem; }
+    .slider-row label { color: var(--text); }
+    .slider-row output { color: var(--accent); font-variant-numeric: tabular-nums; }
+    .slider-row input[type="range"] { grid-column: 1 / -1; width: 100%; min-height: 32px; accent-color: var(--accent); }
+    .slider-row input[type="range"]:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+    /* Text only screen readers hear */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    @media (max-width: 520px) {
+      header h1 { flex-basis: 100%; }
+      button, select { padding: 0.4rem 0.6rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Glowing Caterpillars</h1>
+    <button id="pauseBtn" type="button" aria-pressed="false" aria-keyshortcuts="P">Pause</button>
+    <button id="settingsBtn" type="button" aria-expanded="false" aria-controls="settingsPanel">Settings</button>
+    <label for="colorSelect">Colors
+      <select id="colorSelect" aria-keyshortcuts="M"></select>
+    </label>
+    <button id="removeBtn" type="button" aria-keyshortcuts="Backspace">Remove last</button>
+    <button id="clearBtn" type="button" aria-keyshortcuts="C">Clear all</button>
+    <span id="count" aria-hidden="true">0 caterpillars</span>
+  </header>
+
+  <main>
+    <canvas id="stage" tabindex="0"
+            aria-label="Caterpillar garden. Click or tap to add a caterpillar. With the keyboard, use arrow keys to move the target and Enter or Space to add one."
+            aria-describedby="keyHelp">
+      Your browser does not support the canvas element, which this animation needs.
+    </canvas>
+    <p id="keyHelp" class="sr-only">
+      Arrow keys move the target, hold Shift to move faster. Enter or Space adds a caterpillar.
+      Backspace or Delete removes the newest one. C clears all. M changes color mode. P pauses.
+    </p>
+  </main>
+
+  <section id="settingsPanel" aria-labelledby="settingsTitle" hidden>
+    <h2 id="settingsTitle">Settings</h2>
+    <div class="slider-row">
+      <label for="speedSlider">Speed</label>
+      <output id="speedValue" for="speedSlider"></output>
+      <input id="speedSlider" type="range" min="10" max="300" step="5">
+    </div>
+    <div class="slider-row">
+      <label for="lengthSlider">Length (segments)</label>
+      <output id="lengthValue" for="lengthSlider"></output>
+      <input id="lengthSlider" type="range" min="3" max="40" step="1">
+    </div>
+    <div class="slider-row">
+      <label for="widthSlider">Width</label>
+      <output id="widthValue" for="widthSlider"></output>
+      <input id="widthSlider" type="range" min="3" max="30" step="1">
+    </div>
+  </section>
+
+  <div id="pausedBadge" hidden>Paused — press <kbd>P</kbd> or the Pause button to continue</div>
+
+  <section id="start" aria-labelledby="startTitle">
+    <div class="card">
+      <h2 id="startTitle">Glowing Caterpillars</h2>
+      <p>Drop glowing caterpillars into the dark and watch them wander. When two meet, they either bounce apart or one crawls underneath the other.</p>
+      <ul>
+        <li><strong>Mouse or finger:</strong> click or tap anywhere to add a caterpillar.</li>
+        <li><strong>Keyboard:</strong> <kbd>Arrow keys</kbd> move the target (<kbd>Shift</kbd> = faster), <kbd>Enter</kbd> or <kbd>Space</kbd> adds one.</li>
+        <li><kbd>Backspace</kbd> removes the newest, <kbd>C</kbd> clears all, <kbd>M</kbd> changes colors, <kbd>P</kbd> pauses.</li>
+      </ul>
+      <p id="calmNote" hidden>Your device asks for reduced motion, so the caterpillars will move slowly and gently, without wiggling or pulsing.</p>
+      <button id="startBtn" type="button">Start</button>
+    </div>
+  </section>
+
+  <!-- Announcements for screen readers (counts, paused/running) -->
+  <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
+
+<script>
+// v1.0 - initial build
+
+/* =========================================================================
+   SETTINGS — change these numbers to change how the animation feels.
+   ========================================================================= */
+const SETTINGS = {
+  // --- Movement ---
+  crawlSpeed: 70,          // How fast caterpillars crawl, in screen pixels per second.
+  speedVariety: 0.35,      // Each caterpillar gets a slightly different speed: 0.35 means up to 35% faster or slower.
+  turnWander: 1.6,         // How twisty their paths are. Bigger = more turning. (Radians per second.)
+  inchPulse: 0.45,         // The "scrunch and stretch" crawl. 0 = smooth glide, 1 = strong stop-and-go.
+  crawlRhythm: 5,          // How many scrunch/stretch cycles per second (also drives the legs).
+
+  // --- Body shape ---
+  segmentCount: 14,        // LENGTH: how many round body segments each caterpillar has.
+  segmentRadius: 9,        // WIDTH: the radius (half-width) of each segment, in pixels.
+  segmentGap: 1.1,         // Distance between segments, as a multiple of the radius. Smaller = squished together.
+  tailTaper: 0.45,         // How much thinner the tail is than the head. 0 = no taper.
+  bodyWiggle: 3,           // How far the body sways side to side while crawling, in pixels.
+
+  // --- Glow ---
+  glowSize: 2.3,           // Size of the soft glow around each segment, as a multiple of the segment size.
+  glowStrength: 0.25,      // How bright the glow is, from 0 (none) to 1 (very bright).
+  glowPulse: 0.25,         // Gentle breathing of the glow. 0 = steady.
+
+  // --- Colors ---
+  // Choose one of: 'rgb' (red/green/blue), 'cmy' (cyan/magenta/yellow), 'rainbow', 'grayscale'
+  colorMode: 'rainbow',
+  rainbowSpread: 14,       // In rainbow mode: how much the color shifts from one segment to the next.
+  rainbowFlow: 40,         // In rainbow mode: how fast colors flow along the body.
+
+  // --- Meetings ---
+  bounceChance: 0.5,       // When two caterpillars meet: chance they bounce (the rest of the time one passes under).
+  underDim: 0.5,           // How faded a caterpillar looks while it is underneath another (0 = invisible, 1 = not faded).
+
+  // --- Limits and controls ---
+  maxCaterpillars: 25,     // Most caterpillars allowed at once. Adding more removes the oldest.
+  keyboardStep: 14,        // How far one arrow key press moves the keyboard target, in pixels.
+  keyboardBigStep: 50,     // Same, while holding Shift.
+
+  // --- Reduced motion (used when the computer asks for less motion) ---
+  calmSpeedFactor: 0.5     // Caterpillars move at this fraction of normal speed. Wiggle, pulsing and flashes are turned off.
+};
+
+/* =========================================================================
+   COLOR MODES — each one turns (caterpillar, segment number, time) into a color.
+   Colors use HSL: hue (0-360 around the color wheel), saturation %, lightness %.
+   ========================================================================= */
+const COLOR_MODES = {
+  rgb:       { label: 'Red / Green / Blue',       hues: [0, 120, 220] },
+  cmy:       { label: 'Cyan / Magenta / Yellow',  hues: [185, 300, 55] },
+  rainbow:   { label: 'Rainbow' },
+  grayscale: { label: 'Grayscale' }
+};
+
+// Works out the hue, saturation and lightness for one segment of one caterpillar.
+function segmentColor(cat, index, time) {
+  const mode = SETTINGS.colorMode;
+  if (mode === 'rgb' || mode === 'cmy') {
+    // Each caterpillar keeps one color from the three in the set.
+    const hues = COLOR_MODES[mode].hues;
+    return { h: hues[cat.colorSlot % 3], s: 95, l: 58 };
+  }
+  if (mode === 'grayscale') {
+    // Each caterpillar gets its own shade of gray, from silver to white.
+    return { h: 0, s: 0, l: cat.grayLevel };
+  }
+  // Rainbow: color changes along the body, and flows over time (but stays still in calm mode).
+  const flow = calm ? 0 : time * SETTINGS.rainbowFlow;
+  return { h: (cat.hueStart + index * SETTINGS.rainbowSpread + flow) % 360, s: 95, l: 60 };
+}
+
+// Turns a color plus an opacity (0 to 1) into text the canvas understands.
+function hsla(c, alpha, lightnessShift = 0) {
+  const l = Math.max(0, Math.min(100, c.l + lightnessShift));
+  return `hsla(${c.h}, ${c.s}%, ${l}%, ${alpha})`;
+}
+
+/* =========================================================================
+   PAGE ELEMENTS
+   ========================================================================= */
+const canvas      = document.getElementById('stage');
+const ctx         = canvas.getContext('2d');
+const startScreen = document.getElementById('start');
+const startBtn    = document.getElementById('startBtn');
+const pauseBtn    = document.getElementById('pauseBtn');
+const removeBtn   = document.getElementById('removeBtn');
+const clearBtn    = document.getElementById('clearBtn');
+const colorSelect = document.getElementById('colorSelect');
+const countText   = document.getElementById('count');
+const pausedBadge = document.getElementById('pausedBadge');
+const announcer   = document.getElementById('announcer');
+const calmNote    = document.getElementById('calmNote');
+
+/* =========================================================================
+   STATE — everything that changes while the animation runs.
+   ========================================================================= */
+let caterpillars = [];        // All caterpillars currently on screen.
+let nextId = 1;               // Gives every caterpillar a unique number.
+let started = false;          // Has the person pressed Start yet?
+let paused = false;           // Is the animation paused?
+let lastTime = null;          // Time of the previous frame (to measure how much time passed).
+let elapsed = 0;              // Total running time in seconds (used for color flow and glow breathing).
+let frameRequest = null;      // The ID of the next scheduled frame, so we can cancel it when pausing.
+let width = 0, height = 0;    // Size of the drawing area in CSS pixels.
+let spawnRings = [];          // Little expanding rings shown when a caterpillar appears.
+let meetings = new Map();     // Remembers how each touching pair decided to meet ("bounce" or "under").
+
+// The keyboard target (a crosshair you move with the arrow keys).
+const keyTarget = { x: 0, y: 0, visible: false };
+
+/* =========================================================================
+   REDUCED MOTION — follow the computer's "reduce motion" setting, even if it changes later.
+   ========================================================================= */
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+let calm = motionQuery.matches;
+calmNote.hidden = !calm;
+motionQuery.addEventListener('change', (e) => {
+  calm = e.matches;
+  calmNote.hidden = !calm;
+  if (calm) spawnRings = [];        // remove any spawn flashes right away
+});
+
+/* =========================================================================
+   CANVAS SIZING — keep the canvas crisp on any screen and resize with the window.
+   ========================================================================= */
+function resizeCanvas() {
+  const ratio = window.devicePixelRatio || 1;
+  width = canvas.clientWidth;
+  height = canvas.clientHeight;
+  // The canvas has more real pixels on high-density screens, so lines stay sharp.
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  // After this, we can draw using normal CSS pixel numbers.
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+  // Keep caterpillars and the keyboard target inside the new size.
+  for (const cat of caterpillars) {
+    for (const seg of cat.segments) {
+      seg.x = Math.min(Math.max(seg.x, 0), width);
+      seg.y = Math.min(Math.max(seg.y, 0), height);
+    }
+  }
+  if (!keyTarget.visible) {
+    keyTarget.x = width / 2;
+    keyTarget.y = height / 2;
+  }
+  keyTarget.x = Math.min(keyTarget.x, width);
+  keyTarget.y = Math.min(keyTarget.y, height);
+  draw();   // redraw right away, even if paused
+}
+window.addEventListener('resize', resizeCanvas);
+
+/* =========================================================================
+   CREATING AND REMOVING CATERPILLARS
+   ========================================================================= */
+function addCaterpillar(x, y) {
+  // All segments start piled on the click point; they unfold as the head crawls away.
+  const segments = [];
+  for (let i = 0; i < SETTINGS.segmentCount; i++) segments.push({ x, y });
+
+  const variety = 1 + (Math.random() * 2 - 1) * SETTINGS.speedVariety;
+  caterpillars.push({
+    id: nextId++,
+    segments,
+    heading: Math.random() * Math.PI * 2,   // direction the head points (in radians)
+    turn: 0,                                 // how fast it is currently turning
+    speedFactor: variety,                    // its personal speed multiplier
+    phase: Math.random() * Math.PI * 2,      // where it is in its crawl rhythm
+    depth: Math.random(),                    // higher = drawn on top when passing over another
+    under: false,                            // true while it is crawling under another
+    colorSlot: Math.floor(Math.random() * 3),
+    hueStart: Math.random() * 360,
+    grayLevel: 55 + Math.random() * 40
+  });
+
+  // Too many? Remove the oldest one.
+  if (caterpillars.length > SETTINGS.maxCaterpillars) caterpillars.shift();
+
+  // A little ring to show where it appeared (skipped in calm mode: no flashing).
+  if (!calm) spawnRings.push({ x, y, age: 0 });
+
+  updateCount();
+  draw();
+}
+
+function removeLast() {
+  if (caterpillars.length === 0) return;
+  caterpillars.pop();
+  updateCount();
+  draw();
+}
+
+function clearAll() {
+  caterpillars = [];
+  meetings.clear();
+  updateCount();
+  draw();
+}
+
+// Updates the on-screen count and tells screen readers.
+function updateCount() {
+  const n = caterpillars.length;
+  const text = `${n} caterpillar${n === 1 ? '' : 's'}`;
+  countText.textContent = text;
+  announce(text);
+}
+
+function announce(message) {
+  announcer.textContent = '';
+  // A tiny delay makes screen readers notice the same message said twice.
+  setTimeout(() => { announcer.textContent = message; }, 50);
+}
+
+/* =========================================================================
+   MOVEMENT — update every caterpillar based on how many seconds have passed (dt).
+   Using real time means it moves at the same speed on a 60Hz or 144Hz screen.
+   ========================================================================= */
+function update(dt) {
+  elapsed += dt;
+  const motionScale = calm ? SETTINGS.calmSpeedFactor : 1;
+
+  for (const cat of caterpillars) {
+    const head = cat.segments[0];
+    const r = SETTINGS.segmentRadius;
+
+    // --- Wander: nudge the turning speed a little at random, so paths curve naturally ---
+    cat.turn += (Math.random() - 0.5) * SETTINGS.turnWander * 6 * dt;
+    cat.turn = Math.max(-SETTINGS.turnWander, Math.min(SETTINGS.turnWander, cat.turn));
+    cat.heading += cat.turn * dt * motionScale;
+
+    // --- Crawl rhythm: speed rises and falls like a caterpillar scrunching and stretching ---
+    cat.phase += dt * SETTINGS.crawlRhythm * Math.PI * 2 * motionScale;
+    const pulse = calm ? 1 : (1 - SETTINGS.inchPulse) + SETTINGS.inchPulse * (0.5 + 0.5 * Math.sin(cat.phase)) * 2;
+    const speed = SETTINGS.crawlSpeed * cat.speedFactor * pulse * motionScale;
+
+    // --- Move the head forward in the direction it faces ---
+    head.x += Math.cos(cat.heading) * speed * dt;
+    head.y += Math.sin(cat.heading) * speed * dt;
+
+    // --- Walls: turn around at the edges of the screen ---
+    if (head.x < r)          { head.x = r;          cat.heading = Math.PI - cat.heading; cat.turn *= -0.5; }
+    if (head.x > width - r)  { head.x = width - r;  cat.heading = Math.PI - cat.heading; cat.turn *= -0.5; }
+    if (head.y < r)          { head.y = r;          cat.heading = -cat.heading;          cat.turn *= -0.5; }
+    if (head.y > height - r) { head.y = height - r; cat.heading = -cat.heading;          cat.turn *= -0.5; }
+
+    // --- Body follows the head: each segment stays a fixed distance behind the one in front ---
+    followLeader(cat);
+  }
+
+  handleMeetings(dt);
+
+  // Age the spawn rings and remove finished ones.
+  for (const ring of spawnRings) ring.age += dt;
+  spawnRings = spawnRings.filter(ring => ring.age < 0.6);
+}
+
+// Pulls each segment toward the one ahead of it, like beads on a string.
+function followLeader(cat) {
+  const gap = SETTINGS.segmentRadius * SETTINGS.segmentGap;
+  for (let i = 1; i < cat.segments.length; i++) {
+    const ahead = cat.segments[i - 1];
+    const seg = cat.segments[i];
+    const dx = ahead.x - seg.x;
+    const dy = ahead.y - seg.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > gap) {
+      // Move this segment along the line toward the one ahead, until it is exactly "gap" away.
+      const pull = (dist - gap) / dist;
+      seg.x += dx * pull;
+      seg.y += dy * pull;
+    }
+  }
+}
+
+/* =========================================================================
+   MEETINGS — what happens when one caterpillar's head touches another caterpillar.
+   The first moment two touch, they "decide" (randomly) to bounce or pass under.
+   They stick with that choice until they are apart again.
+   ========================================================================= */
+function handleMeetings(dt) {
+  const touchingNow = new Set();
+  for (const cat of caterpillars) cat.under = false;
+
+  for (let a = 0; a < caterpillars.length; a++) {
+    for (let b = a + 1; b < caterpillars.length; b++) {
+      const catA = caterpillars[a];
+      const catB = caterpillars[b];
+
+      // Does either head touch any part of the other caterpillar?
+      const hitA = headTouches(catA, catB);   // A's head touching B
+      const hitB = headTouches(catB, catA);   // B's head touching A
+      if (!hitA && !hitB) continue;
+
+      // A unique name for this pair, so we remember their decision.
+      const key = catA.id < catB.id ? `${catA.id}-${catB.id}` : `${catB.id}-${catA.id}`;
+      touchingNow.add(key);
+      if (!meetings.has(key)) {
+        meetings.set(key, Math.random() < SETTINGS.bounceChance ? 'bounce' : 'under');
+      }
+
+      if (meetings.get(key) === 'bounce') {
+        // Steer each touching head away from what it touched.
+        if (hitA) steerAway(catA, hitA, dt);
+        if (hitB) steerAway(catB, hitB, dt);
+      } else {
+        // Passing under: the one with lower depth goes underneath and looks faded.
+        const lower = catA.depth < catB.depth ? catA : catB;
+        lower.under = true;
+      }
+    }
+  }
+
+  // Forget pairs that are no longer touching, so next time they meet they decide again.
+  for (const key of meetings.keys()) {
+    if (!touchingNow.has(key)) meetings.delete(key);
+  }
+}
+
+// Checks whether "cat"'s head overlaps any segment of "other".
+// Returns the touched segment (or null) and how much they overlap.
+function headTouches(cat, other) {
+  const head = cat.segments[0];
+  const reach = SETTINGS.segmentRadius * 2;
+  for (const seg of other.segments) {
+    const dist = Math.hypot(head.x - seg.x, head.y - seg.y);
+    if (dist < reach) return { seg, dist, reach };
+  }
+  return null;
+}
+
+// Turns a caterpillar's head away from the segment it bumped, and nudges it out of the overlap.
+function steerAway(cat, hit, dt) {
+  const head = cat.segments[0];
+  let dx = head.x - hit.seg.x;
+  let dy = head.y - hit.seg.y;
+  if (dx === 0 && dy === 0) { dx = Math.cos(cat.heading); dy = Math.sin(cat.heading); }
+  const awayAngle = Math.atan2(dy, dx);
+
+  // Turn smoothly toward the "away" direction (gentler in calm mode, so nothing jerks or shakes).
+  const turnRate = calm ? 4 : 10;
+  cat.heading = blendAngle(cat.heading, awayAngle, Math.min(1, dt * turnRate));
+
+  // Slide the head out of the overlap a little each frame.
+  const overlap = hit.reach - hit.dist;
+  const len = Math.hypot(dx, dy);
+  const push = Math.min(overlap, (calm ? 30 : 90) * dt);
+  head.x += (dx / len) * push;
+  head.y += (dy / len) * push;
+}
+
+// Moves angle "from" part of the way toward angle "to", going the short way around the circle.
+function blendAngle(from, to, amount) {
+  let diff = to - from;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));   // wraps difference into -PI..PI
+  return from + diff * amount;
+}
+
+/* =========================================================================
+   DRAWING — paint one frame.
+   ========================================================================= */
+function draw() {
+  // Clear the screen to the dark background.
+  ctx.fillStyle = '#05060a';
+  ctx.fillRect(0, 0, width, height);
+
+  // Draw lower caterpillars first, so higher ones appear on top of them.
+  const ordered = [...caterpillars].sort((p, q) => p.depth - q.depth);
+  for (const cat of ordered) drawCaterpillar(cat);
+
+  drawSpawnRings();
+  drawKeyTarget();
+}
+
+// Works out where each segment is drawn, including the side-to-side sway.
+function segmentDrawPositions(cat) {
+  const segs = cat.segments;
+  const wiggle = calm ? 0 : SETTINGS.bodyWiggle;
+  return segs.map((seg, i) => {
+    // Direction this segment faces (toward the one ahead, or the heading for the head).
+    let angle = cat.heading;
+    if (i > 0) angle = Math.atan2(segs[i - 1].y - seg.y, segs[i - 1].x - seg.x);
+    // Sway sideways in a wave that travels down the body.
+    const sway = Math.sin(cat.phase - i * 0.7) * wiggle;
+    return {
+      x: seg.x + Math.cos(angle + Math.PI / 2) * sway,
+      y: seg.y + Math.sin(angle + Math.PI / 2) * sway,
+      angle,
+      radius: segmentSize(i)
+    };
+  });
+}
+
+// Size of each segment: head a bit bigger, body getting thinner toward the tail.
+function segmentSize(i) {
+  const r = SETTINGS.segmentRadius;
+  if (i === 0) return r * 1.15;
+  const t = i / (SETTINGS.segmentCount - 1);
+  return r * (1 - t * SETTINGS.tailTaper);
+}
+
+function drawCaterpillar(cat) {
+  const parts = segmentDrawPositions(cat);
+  ctx.save();
+  // Fade it while it is crawling underneath another one.
+  ctx.globalAlpha = cat.under ? SETTINGS.underDim : 1;
+
+  // 1) Soft glow halos (drawn first so the bodies sit on top of the glow).
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    const color = segmentColor(cat, i, elapsed);
+    const breathe = calm ? 1 : 1 + SETTINGS.glowPulse * Math.sin(elapsed * 2 + i * 0.5);
+    const glowR = p.radius * SETTINGS.glowSize;
+    const gradient = ctx.createRadialGradient(p.x, p.y, p.radius * 0.5, p.x, p.y, glowR);
+    gradient.addColorStop(0, hsla(color, SETTINGS.glowStrength * breathe));
+    gradient.addColorStop(1, hsla(color, 0));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 2) Little legs under each body segment, stepping with the crawl rhythm.
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  for (let i = 1; i < parts.length; i++) {
+    const p = parts[i];
+    const color = segmentColor(cat, i, elapsed);
+    const step = calm ? 0 : Math.sin(cat.phase + i * 0.9) * 0.4;
+    ctx.strokeStyle = hsla(color, 0.8, -15);
+    for (const side of [1, -1]) {
+      const legAngle = p.angle + side * (Math.PI / 2 + step);
+      const len = p.radius * 1.35;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x + Math.cos(legAngle) * len, p.y + Math.sin(legAngle) * len);
+      ctx.stroke();
+    }
+  }
+
+  // 3) Body segments from tail to head, so the head ends up on top.
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    const color = segmentColor(cat, i, elapsed);
+    // Main round segment.
+    ctx.fillStyle = hsla(color, 1);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+    // Bright shiny spot so it looks lit from inside.
+    ctx.fillStyle = hsla(color, 0.7, 28);
+    ctx.beginPath();
+    ctx.arc(p.x - p.radius * 0.25, p.y - p.radius * 0.25, p.radius * 0.45, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawFace(cat, parts[0]);
+  ctx.restore();
+}
+
+// Eyes and antennae on the head, pointing the way it is going.
+function drawFace(cat, head) {
+  const a = cat.heading;
+  const r = head.radius;
+  const color = segmentColor(cat, 0, elapsed);
+  const forwardX = Math.cos(a), forwardY = Math.sin(a);
+  const sideX = Math.cos(a + Math.PI / 2), sideY = Math.sin(a + Math.PI / 2);
+
+  // Antennae: two thin lines with glowing tips.
+  ctx.strokeStyle = hsla(color, 0.9, 10);
+  ctx.lineWidth = 1.5;
+  for (const side of [1, -1]) {
+    const baseX = head.x + forwardX * r * 0.6 + sideX * side * r * 0.4;
+    const baseY = head.y + forwardY * r * 0.6 + sideY * side * r * 0.4;
+    const tipX = head.x + forwardX * r * 1.9 + sideX * side * r * 0.9;
+    const tipY = head.y + forwardY * r * 1.9 + sideY * side * r * 0.9;
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+    ctx.fillStyle = hsla(color, 1, 25);
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, r * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Eyes: white circles with dark pupils looking forward.
+  for (const side of [1, -1]) {
+    const eyeX = head.x + forwardX * r * 0.35 + sideX * side * r * 0.42;
+    const eyeY = head.y + forwardY * r * 0.35 + sideY * side * r * 0.42;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(eyeX, eyeY, r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#10121c';
+    ctx.beginPath();
+    ctx.arc(eyeX + forwardX * r * 0.1, eyeY + forwardY * r * 0.1, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Expanding, fading rings where caterpillars appear (never drawn in calm mode).
+function drawSpawnRings() {
+  if (calm) return;
+  for (const ring of spawnRings) {
+    const t = ring.age / 0.6;   // 0 at start, 1 when finished
+    ctx.strokeStyle = `rgba(200, 255, 220, ${0.5 * (1 - t)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(ring.x, ring.y, 6 + t * 30, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// The keyboard crosshair, shown only after the arrow keys are used.
+function drawKeyTarget() {
+  if (!keyTarget.visible) return;
+  const { x, y } = keyTarget;
+  ctx.strokeStyle = '#ffe066';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, 12, 0, Math.PI * 2);
+  ctx.moveTo(x - 20, y); ctx.lineTo(x - 6, y);
+  ctx.moveTo(x + 6, y);  ctx.lineTo(x + 20, y);
+  ctx.moveTo(x, y - 20); ctx.lineTo(x, y - 6);
+  ctx.moveTo(x, y + 6);  ctx.lineTo(x, y + 20);
+  ctx.stroke();
+}
+
+/* =========================================================================
+   ANIMATION LOOP — runs once per screen refresh while not paused.
+   ========================================================================= */
+function frame(now) {
+  if (lastTime === null) lastTime = now;
+  // Seconds since the last frame. Capped so a hiccup doesn't make caterpillars jump.
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  update(dt);
+  draw();
+  frameRequest = requestAnimationFrame(frame);
+}
+
+function startLoop() {
+  if (frameRequest !== null) return;
+  lastTime = null;   // so the first frame after a pause doesn't count the paused time
+  frameRequest = requestAnimationFrame(frame);
+}
+
+function stopLoop() {
+  if (frameRequest !== null) cancelAnimationFrame(frameRequest);
+  frameRequest = null;
+}
+
+/* =========================================================================
+   START, PAUSE AND RESUME
+   ========================================================================= */
+function startGame() {
+  started = true;
+  startScreen.hidden = true;
+  resizeCanvas();
+  startLoop();
+  canvas.focus();
+  announce('Started. Click, tap, or press Enter to add caterpillars.');
+}
+
+function setPaused(shouldPause) {
+  if (!started || paused === shouldPause) return;
+  paused = shouldPause;
+  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  pauseBtn.setAttribute('aria-pressed', String(paused));
+  pausedBadge.hidden = !paused;
+  if (paused) stopLoop(); else startLoop();
+  announce(paused ? 'Paused' : 'Running');
+}
+
+startBtn.addEventListener('click', startGame);
+pauseBtn.addEventListener('click', () => setPaused(!paused));
+removeBtn.addEventListener('click', removeLast);
+clearBtn.addEventListener('click', clearAll);
+
+// Pause automatically when switching to another tab or minimizing the window.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) setPaused(true);
+});
+
+/* =========================================================================
+   COLOR MODE PICKER — fill the dropdown from the COLOR_MODES list.
+   ========================================================================= */
+for (const [key, mode] of Object.entries(COLOR_MODES)) {
+  const option = document.createElement('option');
+  option.value = key;
+  option.textContent = mode.label;
+  colorSelect.appendChild(option);
+}
+colorSelect.value = SETTINGS.colorMode;
+colorSelect.addEventListener('change', () => {
+  SETTINGS.colorMode = colorSelect.value;
+  draw();
+});
+
+// Switch to the next color mode (used by the M key).
+function nextColorMode() {
+  const keys = Object.keys(COLOR_MODES);
+  const next = keys[(keys.indexOf(SETTINGS.colorMode) + 1) % keys.length];
+  SETTINGS.colorMode = next;
+  colorSelect.value = next;
+  announce(`Colors: ${COLOR_MODES[next].label}`);
+  draw();
+}
+
+/* =========================================================================
+   SETTINGS PANEL (v1.1) — sliders on the screen that change SETTINGS live.
+   ========================================================================= */
+const settingsBtn   = document.getElementById('settingsBtn');
+const settingsPanel = document.getElementById('settingsPanel');
+
+// Show or hide the panel, and tell screen readers whether it is open.
+settingsBtn.addEventListener('click', () => {
+  const open = settingsPanel.hidden;
+  settingsPanel.hidden = !open;
+  settingsBtn.setAttribute('aria-expanded', String(open));
+  if (open) document.getElementById('speedSlider').focus();
+});
+
+// Close the panel with the Escape key and put focus back on the Settings button.
+settingsPanel.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    settingsPanel.hidden = true;
+    settingsBtn.setAttribute('aria-expanded', 'false');
+    settingsBtn.focus();
+  }
+});
+
+// Connects one slider to one setting. "onChange" runs extra steps when needed.
+function connectSlider(sliderId, outputId, settingName, unitText, onChange) {
+  const slider = document.getElementById(sliderId);
+  const output = document.getElementById(outputId);
+  slider.value = SETTINGS[settingName];           // start the slider at the current setting
+  const show = () => { output.textContent = `${slider.value}${unitText}`; };
+  show();
+  slider.addEventListener('input', () => {
+    SETTINGS[settingName] = Number(slider.value);
+    show();
+    if (onChange) onChange();
+    draw();                                        // redraw right away, even while paused
+  });
+}
+
+connectSlider('speedSlider',  'speedValue',  'crawlSpeed',    ' px/s');
+connectSlider('lengthSlider', 'lengthValue', 'segmentCount',  '', resizeAllBodies);
+connectSlider('widthSlider',  'widthValue',  'segmentRadius', ' px');
+
+// When the length changes, grow or shrink every caterpillar already on screen.
+function resizeAllBodies() {
+  for (const cat of caterpillars) {
+    const segs = cat.segments;
+    // Too long: cut segments off the tail.
+    if (segs.length > SETTINGS.segmentCount) segs.length = SETTINGS.segmentCount;
+    // Too short: add new segments at the tail; they spread out as it crawls.
+    while (segs.length < SETTINGS.segmentCount) {
+      const tail = segs[segs.length - 1];
+      segs.push({ x: tail.x, y: tail.y });
+    }
+  }
+}
+
+/* =========================================================================
+   MOUSE AND TOUCH — pointer events handle both with one listener.
+   ========================================================================= */
+canvas.addEventListener('pointerdown', (e) => {
+  if (!started) return;
+  const box = canvas.getBoundingClientRect();
+  keyTarget.visible = false;          // hide the keyboard crosshair when using the mouse/finger
+  addCaterpillar(e.clientX - box.left, e.clientY - box.top);
+});
+
+/* =========================================================================
+   KEYBOARD
+   ========================================================================= */
+document.addEventListener('keydown', (e) => {
+  // Before starting, Enter/Space on the Start button works by itself.
+  if (!started) return;
+  // Don't hijack keys while using the color dropdown or a slider, or when holding Ctrl/Cmd/Alt.
+  if (e.target.matches('select, input') || e.ctrlKey || e.metaKey || e.altKey) return;
+
+  const key = e.key.toLowerCase();
+
+  // These shortcuts work anywhere on the page.
+  if (key === 'p') { e.preventDefault(); setPaused(!paused); return; }
+  if (key === 'm') { e.preventDefault(); nextColorMode(); return; }
+  if (key === 'c') { e.preventDefault(); clearAll(); return; }
+
+  // The rest only apply when the canvas has focus (so buttons keep their normal Enter/Space).
+  if (document.activeElement !== canvas) return;
+
+  const step = e.shiftKey ? SETTINGS.keyboardBigStep : SETTINGS.keyboardStep;
+  let moved = false;
+  if (e.key === 'ArrowLeft')  { keyTarget.x -= step; moved = true; }
+  if (e.key === 'ArrowRight') { keyTarget.x += step; moved = true; }
+  if (e.key === 'ArrowUp')    { keyTarget.y -= step; moved = true; }
+  if (e.key === 'ArrowDown')  { keyTarget.y += step; moved = true; }
+
+  if (moved) {
+    e.preventDefault();
+    keyTarget.visible = true;
+    keyTarget.x = Math.min(Math.max(keyTarget.x, 0), width);
+    keyTarget.y = Math.min(Math.max(keyTarget.y, 0), height);
+    draw();
+    return;
+  }
+
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    keyTarget.visible = true;
+    addCaterpillar(keyTarget.x, keyTarget.y);
+    return;
+  }
+
+  if (e.key === 'Backspace' || e.key === 'Delete') {
+    e.preventDefault();
+    removeLast();
+  }
+});
+
+/* =========================================================================
+   FIRST SETUP — size the canvas and show the start screen.
+   ========================================================================= */
+resizeCanvas();
+startBtn.focus();
+</script>
+</body>
+</html>
