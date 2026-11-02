@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<!--
+  MEME MAKER
+  ==========
+  A single-file meme maker that runs entirely in your browser.
+
+  LIBRARIES USED: none.
+  Everything (drawing, text fitting, PNG export) uses built-in browser
+  features: the <canvas> element, FileReader/object URLs, and drag-and-drop.
+
+  PRIVACY: Your photo is opened directly from your computer into this page's
+  memory. Nothing is ever uploaded or sent to any server.
+
+  VERSION HISTORY
+  v1.0 - 2026-11-01 - Initial build: choose or drag-and-drop a photo, top and
+                      bottom text with classic outlined capitals that shrink
+                      to fit, text size slider, code-drawn sample picture,
+                      PNG download.
+  v1.1 - 2026-11-01 - Mobile layout: preview sticks to the top of the screen
+                      so you can see it while typing, tighter spacing, bigger
+                      touch targets, buttons in an easy thumb grid, touch-friendly
+                      hint text, safe-area padding for notched phones.
+  v1.2 - 2026-11-01 - Three text styles: classic (white, black outline),
+                      bold yellow (black outline), and a plain black caption
+                      bar under the picture.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meme Maker</title>
+  <style>
+    /* ---------- Color tokens (light mode first, dark mode below) ---------- */
+    :root {
+      --bg: #f4f4f6;
+      --panel: #ffffff;
+      --text: #1d1d22;
+      --muted: #5b5b66;
+      --border: #d4d4dc;
+      --accent: #5a3fd8;
+      --accent-text: #ffffff;
+      --drop: #ece8ff;
+      --focus: #ffb000;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #16161b;
+        --panel: #22222a;
+        --text: #f1f1f5;
+        --muted: #b0b0bd;
+        --border: #3a3a46;
+        --accent: #8f7bff;
+        --accent-text: #111116;
+        --drop: #2c2650;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    header, main, footer {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    header h1 { margin: 24px 0 4px; font-size: 1.8rem; }
+    header p  { margin: 0 0 20px; color: var(--muted); }
+
+    /* Two columns on wide screens, stacked on phones */
+    main {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+    @media (min-width: 860px) {
+      main { grid-template-columns: 3fr 2fr; align-items: start; }
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    /* The drop zone wraps the meme preview */
+    .drop-zone {
+      position: relative;
+      border: 3px dashed var(--border);
+      border-radius: 10px;
+      padding: 8px;
+      text-align: center;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .drop-zone.dragging {
+      background: var(--drop);
+      border-color: var(--accent);
+    }
+    .drop-zone canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto;
+      border-radius: 6px;
+    }
+    .drop-hint { margin: 8px 0 0; color: var(--muted); font-size: 0.95rem; }
+
+    /* Form controls */
+    label { display: block; font-weight: 600; margin: 14px 0 6px; }
+    label:first-child { margin-top: 0; }
+
+    input[type="text"] {
+      width: 100%;
+      font-size: 1rem;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+    .size-row { display: flex; justify-content: space-between; align-items: baseline; }
+    .size-row output { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    /* Text style picker (v1.2): three pill-shaped radio choices */
+    .style-choice {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin: 14px 0 0;
+      padding: 8px 12px 12px;
+    }
+    .style-choice legend { font-weight: 600; padding: 0 4px; }
+    .style-options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .style-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1 1 auto;
+      margin: 0;
+      padding: 8px 12px;
+      min-height: 44px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .style-option:has(input:checked) { border-color: var(--accent); background: var(--drop); }
+    .style-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+
+    /* Tiny "Aa" previews of each style */
+    .swatch {
+      display: inline-block;
+      min-width: 2.2em;
+      padding: 0 4px;
+      text-align: center;
+      font-family: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Black", sans-serif;
+      font-weight: bold;
+      border-radius: 4px;
+      background: #8aa4b8;
+      text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+    }
+    .swatch.classic { color: #fff; }
+    .swatch.yellow  { color: #ffd700; }
+    .swatch.caption {
+      color: #fff;
+      background: #000;
+      text-shadow: none;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+    button {
+      font: inherit;
+      font-weight: 600;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+      min-height: 44px; /* comfortable touch target */
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--accent-text);
+    }
+    button:hover { filter: brightness(1.07); }
+
+    /* Clear, visible keyboard focus everywhere */
+    :focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .status { min-height: 1.5em; margin: 12px 0 0; color: var(--muted); }
+    .status.error { color: #d93636; }
+
+    footer { color: var(--muted); font-size: 0.9rem; padding-top: 20px; padding-bottom: 28px; }
+
+    /* Show the right hint for mouse vs. touch screens */
+    .touch-hint { display: none; }
+    @media (hover: none) and (pointer: coarse) {
+      .mouse-hint { display: none; }
+      .touch-hint { display: inline; }
+    }
+
+    /* ---------- Phones and small tablets (v1.1) ---------- */
+    @media (max-width: 859px) {
+      header, main, footer {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+      }
+      header h1 { margin: 12px 0 2px; font-size: 1.4rem; }
+      header p  { margin: 0 0 10px; font-size: 0.95rem; }
+
+      main { gap: 12px; }
+      .panel { padding: 12px; border-radius: 10px; }
+
+      /* Keep the preview pinned to the top while scrolling or typing,
+         so the words can be seen updating even with the keyboard open. */
+      .preview-panel {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 8px;
+        border-top-left-radius: 0;
+        border-top-right-radius: 0;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+      }
+      .drop-zone { padding: 4px; border-width: 2px; }
+
+      /* Limit preview height so the controls stay reachable.
+         "dvh" follows the visible screen when the phone keyboard opens. */
+      .drop-zone canvas {
+        max-height: 38vh;
+        max-height: 38dvh;
+        width: auto;
+      }
+      .drop-hint { margin-top: 4px; font-size: 0.85rem; }
+
+      label { margin: 10px 0 4px; }
+
+      /* Buttons: two side by side, Download full width underneath */
+      .buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .buttons button { min-height: 48px; padding: 10px 8px; }
+      #downloadBtn { grid-column: 1 / -1; }
+
+      /* Bigger slider thumb for fingers */
+      input[type="range"] { height: 32px; }
+
+      footer { padding-top: 12px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+    }
+
+    /* Text only screen readers can hear */
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0);
+      white-space: nowrap; border: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Meme Maker</h1>
+    <p>Pick a photo, add your text, download your meme. Your photo never leaves your computer.</p>
+  </header>
+
+  <main>
+    <!-- LEFT: the live meme preview, which is also the drag-and-drop target -->
+    <section class="panel preview-panel" aria-labelledby="preview-heading">
+      <h2 id="preview-heading" class="visually-hidden">Meme preview</h2>
+      <div id="dropZone" class="drop-zone">
+        <canvas id="memeCanvas" role="img" aria-label="Meme preview"></canvas>
+        <p class="drop-hint">
+          <span class="mouse-hint">Drag a photo here, or use “Choose photo”.</span>
+          <span class="touch-hint">Tap “Choose photo” to pick from your phone.</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- RIGHT: all the controls -->
+    <section class="panel" aria-labelledby="controls-heading">
+      <h2 id="controls-heading" class="visually-hidden">Meme controls</h2>
+
+      <form id="controls" onsubmit="return false;">
+        <label for="topText">Top text</label>
+        <input id="topText" type="text" autocomplete="off" enterkeyhint="next"
+               value="When the code works">
+
+        <label for="bottomText">Bottom text</label>
+        <input id="bottomText" type="text" autocomplete="off" enterkeyhint="done"
+               value="On the first try">
+
+        <div class="size-row">
+          <label for="textSize">Text size</label>
+          <output id="textSizeValue" for="textSize">10</output>
+        </div>
+        <input id="textSize" type="range" min="4" max="20" step="1" value="10"
+               aria-describedby="sizeHelp">
+        <p id="sizeHelp" class="visually-hidden">
+          Sets the largest text size. Long text automatically shrinks to fit the picture.
+        </p>
+
+        <!-- v1.2 - Text style choice. Arrow keys move between options. -->
+        <fieldset class="style-choice">
+          <legend>Text style</legend>
+          <div class="style-options">
+            <label class="style-option">
+              <input type="radio" name="textStyle" value="classic" checked>
+              <span class="swatch classic" aria-hidden="true">Aa</span>
+              Classic
+            </label>
+            <label class="style-option">
+              <input type="radio" name="textStyle" value="yellow">
+              <span class="swatch yellow" aria-hidden="true">Aa</span>
+              Yellow
+            </label>
+            <label class="style-option">
+              <input type="radio" name="textStyle" value="caption">
+              <span class="swatch caption" aria-hidden="true">Aa</span>
+              Caption bar
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="buttons">
+          <button type="button" id="chooseBtn">Choose photo</button>
+          <button type="button" id="sampleBtn">Use sample picture</button>
+          <button type="button" id="downloadBtn" class="primary">Download PNG</button>
+        </div>
+
+        <!-- The real file picker is hidden; the "Choose photo" button opens it -->
+        <input id="fileInput" type="file" accept="image/*" hidden>
+      </form>
+
+      <!-- Status messages are announced to screen readers -->
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <footer>
+    Everything happens in your browser. No photos or text are sent anywhere.
+  </footer>
+
+  <script>
+    // v1.0 - initial build
+
+    /* ======================================================================
+       SETUP: grab every element on the page we need to talk to.
+       ====================================================================== */
+    const canvas      = document.getElementById('memeCanvas');
+    const ctx         = canvas.getContext('2d');
+    const dropZone    = document.getElementById('dropZone');
+    const topInput    = document.getElementById('topText');
+    const bottomInput = document.getElementById('bottomText');
+    const sizeSlider  = document.getElementById('textSize');
+    const sizeOutput  = document.getElementById('textSizeValue');
+    const chooseBtn   = document.getElementById('chooseBtn');
+    const sampleBtn   = document.getElementById('sampleBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const fileInput   = document.getElementById('fileInput');
+    const statusEl    = document.getElementById('status');
+
+    // The classic meme font is Impact. Not every device has it (many phones
+    // don't), so we list similar bold, narrow fonts as backups.
+    const MEME_FONT = 'Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Black", sans-serif';
+
+    // Very large photos are scaled down to this longest side so the page
+    // stays fast. 2000 pixels is still plenty sharp for sharing.
+    const MAX_SIDE = 2000;
+
+    // "sourceImage" holds whatever picture is currently under the text:
+    // either the sample drawing or the photo you chose.
+    let sourceImage = null;
+
+    // v1.2 - The picture's drawing size, kept separately from the canvas size,
+    // because the caption bar style makes the canvas taller than the picture.
+    let imageWidth = 0;
+    let imageHeight = 0;
+
+    // v1.2 - Plain font for the caption bar style (no outline, normal letters).
+    const CAPTION_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+    // v1.2 - Text colors for the two outlined styles.
+    const STYLE_COLORS = { classic: '#ffffff', yellow: '#ffd700' };
+
+    // Remembers whether a redraw is already scheduled (see scheduleDraw).
+    let drawPending = false;
+
+
+    /* ======================================================================
+       STATUS MESSAGES: show a short message under the buttons. Because the
+       message area is a "live region", screen readers read it out loud.
+       ====================================================================== */
+    function showStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle('error', isError);
+    }
+
+
+    /* ======================================================================
+       SAMPLE PICTURE: draw a simple cartoon scene with code so there is
+       something to play with before choosing a photo. We draw it on a
+       separate, invisible canvas and then treat it like any other image.
+       ====================================================================== */
+    function makeSamplePicture() {
+      const w = 900, h = 700;
+      const art = document.createElement('canvas');
+      art.width = w;
+      art.height = h;
+      const a = art.getContext('2d');
+
+      // Sky: a soft blue-to-peach gradient from top to bottom.
+      const sky = a.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#6ec3f4');
+      sky.addColorStop(0.7, '#ffd6a5');
+      a.fillStyle = sky;
+      a.fillRect(0, 0, w, h);
+
+      // Sun: a yellow circle with a gentle glow.
+      a.save();
+      a.shadowColor = 'rgba(255, 220, 90, 0.9)';
+      a.shadowBlur = 60;
+      a.fillStyle = '#ffe066';
+      a.beginPath();
+      a.arc(720, 170, 80, 0, Math.PI * 2);
+      a.fill();
+      a.restore();
+
+      // Hills: two overlapping green curves along the bottom.
+      a.fillStyle = '#7bc96f';
+      a.beginPath();
+      a.moveTo(0, 520);
+      a.quadraticCurveTo(250, 400, 520, 520);
+      a.quadraticCurveTo(720, 600, 900, 480);
+      a.lineTo(900, 700);
+      a.lineTo(0, 700);
+      a.closePath();
+      a.fill();
+
+      a.fillStyle = '#5aa84f';
+      a.beginPath();
+      a.moveTo(0, 600);
+      a.quadraticCurveTo(400, 520, 900, 620);
+      a.lineTo(900, 700);
+      a.lineTo(0, 700);
+      a.closePath();
+      a.fill();
+
+      // A happy round character sitting on the hill.
+      const cx = 450, cy = 470;
+
+      // Body
+      a.fillStyle = '#ff8fab';
+      a.beginPath();
+      a.ellipse(cx, cy, 130, 115, 0, 0, Math.PI * 2);
+      a.fill();
+
+      // Cool sunglasses: two dark lenses joined by a bridge.
+      a.fillStyle = '#1d1d22';
+      a.beginPath();
+      a.ellipse(cx - 48, cy - 25, 40, 26, 0, 0, Math.PI * 2);
+      a.ellipse(cx + 48, cy - 25, 40, 26, 0, 0, Math.PI * 2);
+      a.fill();
+      a.fillRect(cx - 12, cy - 32, 24, 8);
+
+      // A little shine on each lens
+      a.fillStyle = 'rgba(255,255,255,0.6)';
+      a.fillRect(cx - 70, cy - 38, 16, 6);
+      a.fillRect(cx + 26, cy - 38, 16, 6);
+
+      // Big smile
+      a.strokeStyle = '#1d1d22';
+      a.lineWidth = 8;
+      a.lineCap = 'round';
+      a.beginPath();
+      a.arc(cx, cy + 20, 50, 0.15 * Math.PI, 0.85 * Math.PI);
+      a.stroke();
+
+      // Rosy cheeks
+      a.fillStyle = 'rgba(255, 80, 120, 0.45)';
+      a.beginPath();
+      a.arc(cx - 90, cy + 25, 18, 0, Math.PI * 2);
+      a.arc(cx + 90, cy + 25, 18, 0, Math.PI * 2);
+      a.fill();
+
+      return art;
+    }
+
+
+    /* ======================================================================
+       USE A NEW PICTURE: size the main canvas to match the picture (shrinking
+       very large photos), remember the picture, and redraw the meme.
+       ====================================================================== */
+    function setSourceImage(img, naturalWidth, naturalHeight) {
+      let w = naturalWidth;
+      let h = naturalHeight;
+
+      // Shrink huge photos proportionally so the longest side is MAX_SIDE.
+      const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+
+      // v1.2 - Remember the picture's size; drawMeme sizes the canvas,
+      // adding room for a caption bar when that style is chosen.
+      imageWidth = w;
+      imageHeight = h;
+      sourceImage = img;
+      drawMeme();
+    }
+
+    /* ======================================================================
+       v1.2 - RESIZE THE CANVAS only when the size really changes.
+       (Changing a canvas's size wipes it, so we skip it when not needed.)
+       ====================================================================== */
+    function resizeCanvas(w, h) {
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+    }
+
+    /* ======================================================================
+       v1.2 - WHICH STYLE IS CHOSEN? Returns 'classic', 'yellow', or 'caption'.
+       ====================================================================== */
+    function getTextStyle() {
+      const checked = document.querySelector('input[name="textStyle"]:checked');
+      return checked ? checked.value : 'classic';
+    }
+
+
+    /* ======================================================================
+       WRAP TEXT: split a sentence into lines that each fit within maxWidth,
+       using the font that is currently set on the canvas. Words are added
+       one at a time; when the next word won't fit, we start a new line.
+       ====================================================================== */
+    function wrapText(text, maxWidth) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const lines = [];
+      let current = '';
+
+      for (const word of words) {
+        const attempt = current ? current + ' ' + word : word;
+        if (ctx.measureText(attempt).width <= maxWidth || !current) {
+          current = attempt;     // it fits (or it's the first word), keep going
+        } else {
+          lines.push(current);   // line is full, start a new one
+          current = word;
+        }
+      }
+      if (current) lines.push(current);
+      return lines;
+    }
+
+
+    /* ======================================================================
+       FIT TEXT: find the biggest font size (no bigger than the slider says)
+       where the wrapped text fits inside the allowed box. We start at the
+       slider size and step down until everything fits. This is what makes
+       long text shrink automatically.
+       ====================================================================== */
+    // v1.2 - "fontFamily" lets the caption style reuse this with its plain font.
+    // "lineSpacing" is how tall each line is compared to the font size.
+    function fitText(text, maxWidth, maxHeight, startSize, fontFamily = MEME_FONT, lineSpacing = 1.1) {
+      const minSize = 10;
+      let size = Math.max(startSize, minSize);
+      let lines = [];
+
+      while (size >= minSize) {
+        ctx.font = `bold ${size}px ${fontFamily}`;
+        lines = wrapText(text, maxWidth);
+
+        const lineHeight = size * lineSpacing;
+        const tooTall = lines.length * lineHeight > maxHeight;
+        const tooWide = lines.some(line => ctx.measureText(line).width > maxWidth);
+
+        if (!tooTall && !tooWide) break;   // found a size that fits
+        size -= Math.max(1, Math.round(size * 0.05)); // shrink a little and retry
+      }
+
+      size = Math.max(size, minSize);
+      ctx.font = `bold ${size}px ${fontFamily}`;
+      return { size, lines: wrapText(text, maxWidth) };
+    }
+
+
+    /* ======================================================================
+       DRAW ONE BLOCK OF TEXT: white capital letters with a thick black
+       outline, centered. "position" is either 'top' or 'bottom'.
+       The outline is drawn first, then the white fill on top, which gives
+       the classic meme look.
+       ====================================================================== */
+    // v1.2 - "fillColor" is white for Classic or yellow for the Yellow style.
+    function drawTextBlock(rawText, position, fillColor = '#ffffff') {
+      const text = rawText.trim().toUpperCase();
+      if (!text) return;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const padding = Math.round(w * 0.04);
+      const maxWidth = w - padding * 2;
+      const maxHeight = h * 0.3;          // each block may use up to 30% of the height
+
+      // The slider value is a percentage of the picture's height.
+      const startSize = Math.round(h * (Number(sizeSlider.value) / 100));
+
+      const { size, lines } = fitText(text, maxWidth, maxHeight, startSize);
+      const lineHeight = size * 1.1;
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.lineJoin = 'round';             // rounded outline corners, no spiky letters
+      ctx.miterLimit = 2;
+      ctx.lineWidth = Math.max(2, size / 7);
+      ctx.strokeStyle = '#000000';
+      ctx.fillStyle = fillColor;
+
+      // Work out where the first line starts.
+      // Top text hangs down from the top edge; bottom text sits up from the bottom edge.
+      let y = position === 'top'
+        ? padding
+        : h - padding - lines.length * lineHeight;
+
+      for (const line of lines) {
+        ctx.strokeText(line, w / 2, y);
+        ctx.fillText(line, w / 2, y);
+        y += lineHeight;
+      }
+    }
+
+
+    /* ======================================================================
+       DRAW THE WHOLE MEME: clear the canvas, paint the picture to fill it,
+       then add the top and bottom text. Also update the description that
+       screen readers hear for the preview.
+       ====================================================================== */
+    function drawMeme() {
+      drawPending = false;
+      if (!sourceImage) return;
+
+      const style = getTextStyle();
+
+      if (style === 'caption') {
+        // v1.2 - Caption bar: picture on top, black bar with plain text below.
+        drawCaptionMeme();
+      } else {
+        // Classic or Yellow: outlined capitals right on the picture.
+        resizeCanvas(imageWidth, imageHeight);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(sourceImage, 0, 0, imageWidth, imageHeight);
+
+        drawTextBlock(topInput.value, 'top', STYLE_COLORS[style]);
+        drawTextBlock(bottomInput.value, 'bottom', STYLE_COLORS[style]);
+      }
+
+      const styleNames = { classic: 'classic', yellow: 'yellow', caption: 'caption bar' };
+      const topText = topInput.value.trim() || 'none';
+      const bottomText = bottomInput.value.trim() || 'none';
+      canvas.setAttribute('aria-label',
+        `Meme preview, ${styleNames[style]} style. Top text: ${topText}. Bottom text: ${bottomText}.`);
+    }
+
+    /* ======================================================================
+       v1.2 - CAPTION BAR STYLE: the picture stays clean, and a plain black
+       bar is added underneath with white text in a normal font (no outline,
+       no forced capitals). The top text comes first, then the bottom text.
+       The bar grows taller as more text is typed, and long text still
+       shrinks to fit. If both boxes are empty, no bar is added.
+       ====================================================================== */
+    function drawCaptionMeme() {
+      const w = imageWidth;
+      const padding = Math.round(w * 0.04);
+      const maxWidth = w - padding * 2;
+      const maxHeight = imageHeight * 0.3;   // each text may use up to 30% of the picture height
+      const lineSpacing = 1.25;
+
+      // Caption text looks best a bit smaller than meme text, so we use
+      // 60% of the slider's size as the starting point.
+      const startSize = Math.round(imageHeight * (Number(sizeSlider.value) / 100) * 0.6);
+
+      // Step 1: work out the font size and lines for each piece of text.
+      const blocks = [topInput.value, bottomInput.value]
+        .map(t => t.trim())
+        .filter(Boolean)
+        .map(t => fitText(t, maxWidth, maxHeight, startSize, CAPTION_FONT, lineSpacing));
+
+      // Step 2: add up how tall the bar needs to be.
+      const gap = Math.round(padding * 0.5);   // space between top and bottom text
+      let barHeight = 0;
+      if (blocks.length) {
+        barHeight = padding * 2 + gap * (blocks.length - 1);
+        for (const b of blocks) barHeight += b.lines.length * b.size * lineSpacing;
+        barHeight = Math.ceil(barHeight);
+      }
+
+      // Step 3: make the canvas tall enough, then draw the picture and bar.
+      // (Resizing resets the font settings, so we set them again below.)
+      resizeCanvas(w, imageHeight + barHeight);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(sourceImage, 0, 0, imageWidth, imageHeight);
+
+      if (!blocks.length) return;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, imageHeight, w, barHeight);
+
+      // Step 4: write each line of text, centered, in white.
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+
+      let y = imageHeight + padding;
+      blocks.forEach((b, i) => {
+        ctx.font = `bold ${b.size}px ${CAPTION_FONT}`;
+        for (const line of b.lines) {
+          ctx.fillText(line, w / 2, y);
+          y += b.size * lineSpacing;
+        }
+        if (i < blocks.length - 1) y += gap;
+      });
+    }
+
+    // Typing fires many events quickly. Instead of redrawing for every single
+    // keystroke, we redraw at most once per screen refresh. Smooth and fast.
+    function scheduleDraw() {
+      if (drawPending) return;
+      drawPending = true;
+      requestAnimationFrame(drawMeme);
+    }
+
+
+    /* ======================================================================
+       OPEN A PHOTO FILE: read the chosen or dropped file straight from your
+       computer into the page. URL.createObjectURL makes a temporary,
+       local-only address for the file — it is NOT an upload.
+       ====================================================================== */
+    function loadImageFile(file) {
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        showStatus('That file is not a picture. Please choose a JPG, PNG, GIF, or WebP image.', true);
+        return;
+      }
+
+      const localUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = () => {
+        setSourceImage(img, img.naturalWidth, img.naturalHeight);
+        URL.revokeObjectURL(localUrl);   // free the temporary address
+        showStatus(`Loaded “${file.name}”.`);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(localUrl);
+        showStatus('Sorry, this browser could not open that picture. Try a JPG or PNG.', true);
+      };
+
+      img.src = localUrl;
+    }
+
+
+    /* ======================================================================
+       DOWNLOAD: turn the canvas into a PNG file and save it. We create an
+       invisible link pointing at the file, "click" it, then clean up.
+       ====================================================================== */
+    function downloadMeme() {
+      canvas.toBlob(blob => {
+        if (!blob) {
+          showStatus('Something went wrong making the PNG. Please try again.', true);
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'meme.png';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showStatus('Your meme was saved as meme.png.');
+      }, 'image/png');
+    }
+
+
+    /* ======================================================================
+       BUTTONS AND INPUTS: connect each control to what it should do.
+       ====================================================================== */
+
+    // Typing in either text box redraws the meme right away.
+    topInput.addEventListener('input', scheduleDraw);
+    bottomInput.addEventListener('input', scheduleDraw);
+
+    // v1.1 - Pressing Enter in the top box jumps to the bottom box.
+    // Pressing Enter in the bottom box closes the phone keyboard.
+    topInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); bottomInput.focus(); }
+    });
+    bottomInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); bottomInput.blur(); }
+    });
+
+    // Moving the slider updates the number beside it and redraws.
+    sizeSlider.addEventListener('input', () => {
+      sizeOutput.textContent = sizeSlider.value;
+      scheduleDraw();
+    });
+
+    // v1.2 - Picking a text style redraws the meme in that style.
+    document.querySelectorAll('input[name="textStyle"]').forEach(radio => {
+      radio.addEventListener('change', scheduleDraw);
+    });
+
+    // "Choose photo" opens the hidden file picker.
+    chooseBtn.addEventListener('click', () => fileInput.click());
+
+    // When a file is picked, load it. Resetting the value lets you pick
+    // the same file again later if you want to.
+    fileInput.addEventListener('change', () => {
+      loadImageFile(fileInput.files[0]);
+      fileInput.value = '';
+    });
+
+    // "Use sample picture" brings back the code-drawn cartoon.
+    sampleBtn.addEventListener('click', () => {
+      const art = makeSamplePicture();
+      setSourceImage(art, art.width, art.height);
+      showStatus('Showing the sample picture.');
+    });
+
+    downloadBtn.addEventListener('click', downloadMeme);
+
+
+    /* ======================================================================
+       DRAG AND DROP: highlight the preview while a file is dragged over it,
+       and load the photo when it is dropped.
+
+       Browsers fire "dragenter"/"dragleave" for every child element too, so
+       we count them to know when the file has truly left the drop zone.
+       ====================================================================== */
+    let dragDepth = 0;
+
+    dropZone.addEventListener('dragenter', e => {
+      e.preventDefault();
+      dragDepth++;
+      dropZone.classList.add('dragging');
+    });
+
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();                 // required, or "drop" never fires
+      e.dataTransfer.dropEffect = 'copy';
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) dropZone.classList.remove('dragging');
+    });
+
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dragDepth = 0;
+      dropZone.classList.remove('dragging');
+      loadImageFile(e.dataTransfer.files[0]);
+    });
+
+    // If a photo is dropped anywhere else on the page, still use it, instead
+    // of letting the browser leave this page to open the picture by itself.
+    window.addEventListener('dragover', e => e.preventDefault());
+    window.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dropZone.contains(e.target)) loadImageFile(e.dataTransfer.files[0]);
+    });
+
+
+    /* ======================================================================
+       START: show the sample picture as soon as the page opens.
+       ====================================================================== */
+    const startingArt = makeSamplePicture();
+    setSourceImage(startingArt, startingArt.width, startingArt.height);
+  </script>
+</body>
+</html>
