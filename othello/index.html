@@ -1,0 +1,1485 @@
+<!--
+  OTHELLO
+  A single-file web page for playing Othello against the computer or a friend.
+
+  LIBRARIES AND OUTSIDE RESOURCES
+  - None. No libraries, no web fonts, no images from other sites.
+    The page makes no network requests and sends no data anywhere.
+    Scores are kept only in this browser's localStorage.
+
+  VERSION HISTORY
+  v1.0 - 2026-11-10 - initial build: 8x8 board, Easy / Hard computer, two-player mode,
+         choose Black or White, flipping discs, pass rule, keyboard play,
+         computer pause, New game button, saved scoreboard.
+  v1.1 - 2026-11-10 - added Medium computer (looks 2 moves ahead, sometimes slips up)
+         and a Medium row on the scoreboard. Old saved scores carry over.
+  v1.2 - 2026-11-10 - the computer now has a name (Ollie) and a personality: a friendly
+         comment after some of its moves and a different line when it wins, loses or
+         draws. Comments show beside the board and are announced for screen readers.
+  v1.3 - 2026-11-10 - Undo button: takes back your last move and the computer's reply
+         (or just the last move in two-player games). Turned off once a game ends.
+  v1.4 - 2026-11-10 - Hint button: highlights the square the Hard computer would play
+         for you and moves the keyboard cursor there.
+  v1.5 - 2026-11-10 - shareable games: the page link now ends with the moves so far
+         (for example #game-d3c5f6). Opening that link replays the game in two-player
+         mode so a friend can make the next move.
+  v1.6 - 2026-11-10 - "Share game" button copies the game link to the clipboard. If the
+         browser won't allow copying, the link appears in a box, selected, to copy by hand.
+-->
+<title>Othello</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Play Othello against the computer on Easy or Hard, or against a friend.">
+<style>
+  /* Layout: board on the left, a narrow control column on the right; stacks to one column on phones. */
+  :root {
+    --bg: #eef1ec;          /* page background, a pale sage grey */
+    --fg: #17221c;          /* main text */
+    --muted: #556259;       /* secondary text */
+    --panel: #ffffff;       /* control panel surface */
+    --line: #d3dbd5;        /* thin dividers */
+    --felt: #1d6a48;        /* board cloth */
+    --felt-line: #0f3f2a;   /* grid lines on the board */
+    --frame: #3b2a1c;       /* wooden frame around the board */
+    --frame-text: #e9d9bf;  /* coordinate letters on the frame */
+    --accent: #b5681d;      /* buttons and highlights, a warm amber */
+    --accent-fg: #ffffff;
+    --focus: #ffd34d;       /* keyboard focus ring on the board */
+    --hint: #7fe3ff;        /* glowing ring around a suggested move (shows on the green board in both themes) */
+    --win: #1d6a48;
+    --font-display: "Avenir Next", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1512; --fg: #e4ebe6; --muted: #9aa8a0; --panel: #18211c; --line: #2a3630;
+      --felt: #1a5e40; --felt-line: #0a2c1d; --frame: #2a1d12; --frame-text: #d9c6a6;
+      --accent: #e0923f; --accent-fg: #1a1208; --focus: #ffd34d; --win: #6fd3a2;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1512; --fg: #e4ebe6; --muted: #9aa8a0; --panel: #18211c; --line: #2a3630;
+    --felt: #1a5e40; --felt-line: #0a2c1d; --frame: #2a1d12; --frame-text: #d9c6a6;
+    --accent: #e0923f; --accent-fg: #1a1208; --focus: #ffd34d; --win: #6fd3a2;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    padding-block: 20px 32px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 20px; }
+
+  header h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 6vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin: 0;
+    display: flex; align-items: center; gap: 12px;
+  }
+  /* Little two-tone disc next to the title */
+  .logo-disc {
+    width: 0.8em; height: 0.8em; border-radius: 50%;
+    background: linear-gradient(90deg, #111 50%, #f4f4f0 50%);
+    box-shadow: 0 0 0 2px var(--fg);
+    flex: none;
+  }
+  header p { margin: 6px 0 0; color: var(--muted); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 760px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---------- Board ---------- */
+  .frame {
+    background: var(--frame);
+    border-radius: 14px;
+    padding: 6px 12px 12px 6px;
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-rows: 22px auto;
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.25), inset 0 0 0 2px rgba(255,255,255,0.06);
+  }
+  .coords-top, .coords-left {
+    display: grid; color: var(--frame-text);
+    font: 600 0.75rem/1 var(--font-display);
+    letter-spacing: 0.08em;
+  }
+  .coords-top { grid-column: 2; grid-template-columns: repeat(8, 1fr); align-items: center; text-align: center; }
+  .coords-left { grid-row: 2; grid-template-rows: repeat(8, 1fr); align-items: center; justify-items: center; }
+  .coords-top span, .coords-left span { display: grid; place-items: center; }
+
+  .board {
+    grid-column: 2; grid-row: 2;
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    aspect-ratio: 1;
+    max-width: 100%;
+    gap: 2px;
+    padding: 2px;
+    background: var(--felt-line);
+    border-radius: 4px;
+  }
+  .board:focus-within { outline: none; }
+  /* The four small "star point" dots that mark the central 4x4 area on a real Othello board */
+  .star {
+    position: absolute; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--felt-line); transform: translate(-50%, -50%); z-index: 2; pointer-events: none;
+  }
+
+  .cell {
+    position: relative;
+    background: var(--felt);
+    perspective: 500px;
+    cursor: pointer;
+    outline: none;
+  }
+  .cell:focus-visible { box-shadow: inset 0 0 0 3px var(--focus); z-index: 3; }
+  /* The square suggested by the Hint button: a pulsing light-blue ring */
+  .cell.suggested { box-shadow: inset 0 0 0 4px var(--hint); animation: hint-pulse 1.2s ease-in-out infinite; z-index: 3; }
+  .cell.suggested:focus-visible { box-shadow: inset 0 0 0 3px var(--focus), inset 0 0 0 7px var(--hint); }
+  @keyframes hint-pulse { 50% { background: color-mix(in srgb, var(--felt) 70%, var(--hint)); } }
+  @media (prefers-reduced-motion: reduce) { .cell.suggested { animation: none; } }
+  /* A soft dot that shows where the current player is allowed to play */
+  .cell.hint::after {
+    content: ""; position: absolute; inset: 38%; border-radius: 50%;
+    background: rgba(0,0,0,0.28);
+  }
+  .cell.hint.hint-white::after { background: rgba(255,255,255,0.35); }
+  .cell.hint:hover::after { inset: 30%; }
+  /* A small amber marker on the most recent move */
+  .cell.last::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 16%; height: 16%;
+    transform: translate(-50%, -50%); border-radius: 50%;
+    background: var(--accent); z-index: 4; pointer-events: none;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.25);
+  }
+
+  /* A disc has two faces. Turning it 180 degrees shows the other face, which looks like a flip. */
+  .piece { position: absolute; inset: 9%; pointer-events: none; }
+  .piece.pop { animation: pop 260ms ease-out; }
+  @keyframes pop { from { transform: scale(0.4); opacity: 0.2; } to { transform: scale(1); opacity: 1; } }
+  .disc {
+    position: absolute; inset: 0;
+    transform-style: preserve-3d;
+    transition: transform 420ms cubic-bezier(.4,.1,.3,1);
+  }
+  .disc.is-white { transform: rotateY(180deg); }
+  .face {
+    position: absolute; inset: 0; border-radius: 50%;
+    backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    box-shadow: 0 3px 4px rgba(0,0,0,0.35);
+  }
+  .face.black { background: radial-gradient(circle at 35% 30%, #4a4a4a, #111 55%, #000); }
+  .face.white { background: radial-gradient(circle at 35% 30%, #ffffff, #ecebe4 55%, #c9c7bd); transform: rotateY(180deg); }
+
+  /* ---------- Side panel ---------- */
+  .panel { display: grid; gap: 16px; min-width: 0; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: grid; gap: 12px;
+  }
+  .card h2 {
+    margin: 0; font: 700 0.75rem/1.2 var(--font-display);
+    text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+  }
+
+  .status {
+    font: 700 1.25rem/1.3 var(--font-display);
+    display: flex; align-items: center; gap: 10px; min-height: 2.6em;
+  }
+  .status.over { color: var(--win); }
+  .swatch {
+    width: 22px; height: 22px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 0 2px var(--line);
+  }
+  .swatch.black { background: #111; }
+  .swatch.white { background: #f4f4f0; }
+  .swatch.none { visibility: hidden; }
+  .notice { margin: 0; color: var(--muted); min-height: 1.5em; font-size: 0.95rem; }
+
+  .counts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .count {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+    font-variant-numeric: tabular-nums;
+  }
+  .count strong { font: 800 1.4rem/1 var(--font-display); margin-left: auto; }
+  .count.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px; min-width: 0; }
+  fieldset[disabled] { opacity: 0.5; }
+  legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+  .options { display: flex; flex-wrap: wrap; gap: 6px; }
+  .options label {
+    position: relative; display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 999px;
+    cursor: pointer; user-select: none; font-size: 0.95rem;
+  }
+  .options input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .options label:has(input:checked) { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .options label:has(input:focus-visible) { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .small { font-size: 0.85rem; color: var(--muted); margin: 0; }
+
+  button.btn {
+    font: 700 1rem/1 var(--font-body);
+    padding: 12px 16px; border-radius: 10px; border: 0;
+    background: var(--accent); color: var(--accent-fg); cursor: pointer;
+  }
+  button.btn:hover { filter: brightness(1.06); }
+  /* New game and Undo side by side */
+  .game-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .game-buttons .btn { padding-inline: 8px; }
+  /* Share game sits on its own row under the other three buttons */
+  .game-buttons .share { grid-column: 1 / -1; }
+  .share-box { display: grid; gap: 4px; }
+  .share-box input {
+    width: 100%; font: 0.85rem/1.3 ui-monospace, monospace; padding: 8px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg);
+  }
+  /* Undo is a quieter, outlined button */
+  button.btn.secondary { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 2px var(--line); }
+  button.btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+  button.btn:focus-visible, button.link:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+  button.link {
+    background: none; border: 0; padding: 4px 0; color: var(--muted);
+    text-decoration: underline; cursor: pointer; font: inherit; font-size: 0.9rem; justify-self: start;
+  }
+  .confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.9rem; }
+  .confirm button { font: 600 0.9rem/1 var(--font-body); padding: 8px 12px; border-radius: 8px; cursor: pointer; border: 1px solid var(--line); background: transparent; color: var(--fg); }
+  .confirm button.danger { background: #a3312a; border-color: #a3312a; color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+
+  /* ---------- The computer's comments (a speech bubble beside the board) ---------- */
+  .buddy { display: flex; align-items: center; gap: 10px; }
+  .buddy-face {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    display: grid; place-items: center;
+    background: var(--felt); color: #f4f4f0;
+    font: 800 1.1rem/1 var(--font-display);
+    box-shadow: 0 0 0 3px var(--frame);
+  }
+  .buddy-name { font: 700 1.05rem/1.2 var(--font-display); margin: 0; }
+  .buddy-level { font-size: 0.85rem; color: var(--muted); margin: 0; }
+  .speech {
+    position: relative; margin: 0;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 14px; min-height: 2.9em;
+    font-size: 1rem; line-height: 1.4;
+  }
+  /* The little tail that points up at the computer's face */
+  .speech::before {
+    content: ""; position: absolute; top: -7px; left: 16px;
+    width: 12px; height: 12px; transform: rotate(45deg);
+    background: var(--bg); border-left: 1px solid var(--line); border-top: 1px solid var(--line);
+  }
+  .speech.fresh { animation: speech-in 300ms ease-out; }
+  @keyframes speech-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .speech.fresh { animation: none; } }
+
+  details summary { cursor: pointer; font-weight: 600; }
+  details ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 0.92rem; display: grid; gap: 4px; }
+  kbd { font: 600 0.8em/1 ui-monospace, monospace; padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px; }
+
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .disc { transition: none !important; }
+    .piece.pop { animation: none; }
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1><span class="logo-disc" aria-hidden="true"></span>Othello</h1>
+    <p>Outflank your opponent's stones to flip them. Most stones at the end wins.</p>
+  </header>
+
+  <main class="layout">
+    <!-- The board. Coordinates (A–H across, 1–8 down) are drawn on the wooden frame. -->
+    <section aria-labelledby="board-heading">
+      <h2 id="board-heading" class="sr-only">Game board</h2>
+      <div class="frame">
+        <div class="coords-top" aria-hidden="true" id="coords-top"></div>
+        <div class="coords-left" aria-hidden="true" id="coords-left"></div>
+        <div class="board" id="board" role="grid" aria-label="Othello board, 8 by 8. Use arrow keys to move, Enter to place a stone."></div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Game controls">
+      <section class="card" aria-labelledby="turn-heading">
+        <h2 id="turn-heading">Game</h2>
+        <div class="status" id="status" role="status" aria-live="polite">
+          <span class="swatch black" id="status-swatch" aria-hidden="true"></span>
+          <span id="status-text">Your turn</span>
+        </div>
+        <p class="notice" id="notice"></p>
+        <div class="counts">
+          <div class="count" id="count-black"><span class="swatch black" aria-hidden="true"></span>Black <strong id="black-count">2</strong></div>
+          <div class="count" id="count-white"><span class="swatch white" aria-hidden="true"></span>White <strong id="white-count">2</strong></div>
+        </div>
+        <div class="game-buttons">
+          <button class="btn" id="new-game" type="button">New game</button>
+          <button class="btn secondary" id="undo" type="button" disabled>Undo</button>
+          <button class="btn secondary" id="hint" type="button">Hint</button>
+          <button class="btn secondary share" id="share" type="button">Share game</button>
+        </div>
+        <!-- Shown only if the browser refuses to copy: the link, ready to copy by hand -->
+        <div class="share-box" id="share-box" hidden>
+          <label for="share-link" class="small">Copy this link and send it to your friend:</label>
+          <input type="text" id="share-link" readonly>
+        </div>
+      </section>
+
+      <!-- The computer's name and its latest comment. Hidden when two people play each other. -->
+      <section class="card" id="buddy-card" aria-labelledby="buddy-name">
+        <div class="buddy">
+          <span class="buddy-face" id="buddy-initial" aria-hidden="true">O</span>
+          <div>
+            <p class="buddy-name" id="buddy-name">Ollie</p>
+            <p class="buddy-level" id="buddy-level">Your opponent · Easy</p>
+          </div>
+        </div>
+        <p class="speech" id="speech" aria-live="polite" aria-atomic="true"></p>
+      </section>
+
+      <section class="card" aria-labelledby="settings-heading">
+        <h2 id="settings-heading">Settings</h2>
+        <fieldset id="mode-set">
+          <legend>Opponent</legend>
+          <div class="options">
+            <label><input type="radio" name="mode" id="mode-easy" value="easy" checked> Computer · Easy</label>
+            <label><input type="radio" name="mode" id="mode-medium" value="medium"> Computer · Medium</label>
+            <label><input type="radio" name="mode" id="mode-hard" value="hard"> Computer · Hard</label>
+            <label><input type="radio" name="mode" id="mode-friend" value="friend"> A friend</label>
+          </div>
+        </fieldset>
+        <fieldset id="color-set">
+          <legend>You play</legend>
+          <div class="options">
+            <label><input type="radio" name="color" id="color-black" value="black" checked> Black (moves first)</label>
+            <label><input type="radio" name="color" id="color-white" value="white"> White</label>
+          </div>
+        </fieldset>
+        <p class="small" id="settings-note">Changes start a new game once you press New game.</p>
+      </section>
+
+      <section class="card" aria-labelledby="score-heading">
+        <h2 id="score-heading">Scoreboard vs. computer</h2>
+        <table>
+          <caption class="sr-only">Your wins, losses and draws against the computer</caption>
+          <thead><tr><th scope="col">Level</th><th scope="col">Wins</th><th scope="col">Losses</th><th scope="col">Draws</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Easy</th><td id="easy-w">0</td><td id="easy-l">0</td><td id="easy-d">0</td></tr>
+            <tr><th scope="row">Medium</th><td id="medium-w">0</td><td id="medium-l">0</td><td id="medium-d">0</td></tr>
+            <tr><th scope="row">Hard</th><td id="hard-w">0</td><td id="hard-l">0</td><td id="hard-d">0</td></tr>
+          </tbody>
+        </table>
+        <button class="link" type="button" id="reset-scores">Reset scores</button>
+        <div class="confirm" id="confirm-reset" hidden>
+          <span>Clear all scores?</span>
+          <button type="button" class="danger" id="confirm-yes">Yes, clear</button>
+          <button type="button" id="confirm-no">Cancel</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <details>
+          <summary>How to play</summary>
+          <ul>
+            <li>Black moves first. Place a stone so it traps a straight line of your opponent's stones between it and another of your stones.</li>
+            <li>Every trapped line flips to your color, in all directions at once.</li>
+            <li>If you have no move that flips anything, you must pass.</li>
+            <li>The game ends when neither side can move. Most stones wins.</li>
+            <li>To share a game in progress, send the page link: it holds the moves so far, and your friend can make the next move.</li>
+            <li>Keyboard: <kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd> to choose a square, <kbd>Enter</kbd> or <kbd>Space</kbd> to play.</li>
+          </ul>
+        </details>
+      </section>
+    </aside>
+  </main>
+
+  <!-- Hidden announcer: screen readers hear each move described in words -->
+  <div class="sr-only" id="announcer" aria-live="polite"></div>
+</div>
+
+<script>
+// =====================================================================
+// EDITABLE SETTINGS AND WORDING
+// Everything you might want to change lives in this one object.
+// You can change the wording, the computer's pause, and how hard
+// "Hard" thinks, without touching any of the game code below.
+// =====================================================================
+const GAME_TEXT_AND_SETTINGS = {
+  // How long the computer waits before moving, in milliseconds (1000 = 1 second)
+  computerPauseMs: 750,
+
+  // Delay between each stone flipping, so flips ripple outward (milliseconds)
+  flipRippleMs: 70,
+
+  // How many moves ahead the Medium computer looks (Hard looks further, see below)
+  mediumLookAhead: 2,
+
+  // Chance (0 to 1) that Medium plays a random legal move instead of its best one
+  mediumSlipChance: 0.15,
+
+  // How many moves ahead the Hard computer looks. 4 is strong and still fast.
+  hardLookAhead: 4,
+
+  // When this many empty squares or fewer remain, Hard plays the ending perfectly
+  hardPerfectEndgameAt: 9,
+
+  // Chance (0 to 1) that Easy picks a completely random legal move instead of a greedy one
+  easyRandomChance: 0.7,
+
+  // Names shown for the two colors
+  blackName: "Black",
+  whiteName: "White",
+
+  // Messages. {player} is replaced with a color name, {square} with a square like D3,
+  // {count} with a number, {black} and {white} with final stone counts.
+  messages: {
+    yourTurn: "Your turn ({player})",
+    computerThinking: "Computer is thinking…",
+    friendTurn: "{player}'s turn",
+    pass: "{player} has no move that flips a stone, so {player} passes.",
+    notValid: "{square} doesn't flip any stones. Pick a square with a dot.",
+    youWin: "You win! {black} to {white}.",
+    computerWins: "The computer wins, {black} to {white}.",
+    playerWins: "{player} wins! {black} to {white}.",
+    draw: "It's a draw, {black} to {white}.",
+    moveSpoken: "{player} played {square} and flipped {count}.",
+    settingsWait: "Press New game to use the new settings.",
+    undone: "Move taken back.",
+    hint: "Hint: the Hard computer would play {square}.",
+    loadedShared: "Shared game loaded ({count}). Two-player mode: make the next move.",
+    badLink: "That game link didn't make sense, so a new game started.",
+    linkCopied: "Game link copied. Paste it into a message to your friend.",
+    copyButtonDone: "Link copied!",
+    copyFallback: "Your browser didn't allow copying. The link is selected below: copy it with Ctrl+C (or Cmd+C).",
+    settingsNote: "Changes start a new game once you press New game."
+  },
+
+  // Where the scoreboard is saved in this browser
+  storageKey: "othello-scoreboard-v1",
+
+  // ---------------------------------------------------------------
+  // THE COMPUTER'S NAME AND PERSONALITY
+  // Change the name, or add, remove and reword any line below.
+  // Each list just needs at least one line in it.
+  // ---------------------------------------------------------------
+  computerName: "Ollie",
+
+  // Chance (0 to 1) that the computer says something after an ordinary move.
+  // Corner grabs and big flips always get a comment.
+  computerChattiness: 0.4,
+
+  // How long after its move the computer speaks (milliseconds), so the move lands first
+  computerCommentDelayMs: 500,
+
+  computerLines: {
+    // Said at the start of each game
+    hello: [
+      "Hi, I'm Ollie! Good luck. I'll try to go easy on you. Maybe.",
+      "Ready when you are. I've been practising my corners.",
+      "Ooh, a fresh board. My favourite.",
+      "Let's have a good game!"
+    ],
+    // Said after some ordinary moves
+    move: [
+      "Hmm, how about here?",
+      "Your turn! No pressure.",
+      "I like the look of that square.",
+      "Just tidying up the board a little.",
+      "That felt right.",
+      "Let's see what you make of that.",
+      "Tricky board today!",
+      "Hmm. I hope I didn't just give you something."
+    ],
+    // Said when the computer takes a corner
+    corner: [
+      "A corner! Nobody can flip that one.",
+      "Corners are cozy. I'll stay here, thanks.",
+      "Ooh, I've been waiting for that corner."
+    ],
+    // Said when the computer flips 5 or more stones in one move
+    bigFlip: [
+      "Look at them all flip!",
+      "Whoosh! That was a good one.",
+      "Sorry about that. Well, a little sorry."
+    ],
+    // Said when the computer wins
+    win: [
+      "Good game! That one went my way.",
+      "Yay! Want a rematch? I'll be ready.",
+      "Phew, I won! You made me work for it."
+    ],
+    // Said when the computer loses
+    lose: [
+      "You got me! Well played.",
+      "Nice work! I didn't see that coming.",
+      "Ahh, you win! I'll get you next time."
+    ],
+    // Said when the game is a draw
+    draw: [
+      "A tie! We're perfectly matched.",
+      "Even stevens! Shall we break the tie?"
+    ]
+  },
+
+  // How many stones must flip in one computer move to count as a "big flip"
+  bigFlipSize: 5,
+
+  // The web address people use to open this page. The Share game button adds
+  // the moves to the end of it. If you put the page somewhere else (for example
+  // your own website), change this to that address. When the page is opened
+  // directly in a browser tab, its own address is used instead.
+  shareBaseLink: "https://claude.ai/artifact/EwKjJ5KZMyputeP7ot3ygB"
+};
+
+// =====================================================================
+// BASIC GAME CONSTANTS
+// The board is a list of 64 squares, read left-to-right, top-to-bottom.
+// Square 0 is A1 (top-left) and square 63 is H8 (bottom-right).
+// Each square holds EMPTY, BLACK or WHITE.
+// =====================================================================
+const EMPTY = 0, BLACK = 1, WHITE = 2;
+const SIZE = 8;
+const COLUMN_LETTERS = "ABCDEFGH";
+
+// The eight directions a sandwich can run: up, down, left, right and the four diagonals.
+// Each pair is [row change, column change].
+const DIRECTIONS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+
+// How valuable each square is to the Hard computer.
+// Corners are great (they can never be flipped). The squares touching corners
+// are risky because they often hand the corner to the opponent.
+const SQUARE_VALUES = [
+  100, -20, 10,  5,  5, 10, -20, 100,
+  -20, -50, -2, -2, -2, -2, -50, -20,
+   10,  -2, -1, -1, -1, -1,  -2,  10,
+    5,  -2, -1, -1, -1, -1,  -2,   5,
+    5,  -2, -1, -1, -1, -1,  -2,   5,
+   10,  -2, -1, -1, -1, -1,  -2,  10,
+  -20, -50, -2, -2, -2, -2, -50, -20,
+  100, -20, 10,  5,  5, 10, -20, 100
+];
+
+// =====================================================================
+// SMALL HELPERS
+// =====================================================================
+
+// The other player's color: if you give it BLACK you get WHITE, and the reverse.
+function opponentOf(player) { return player === BLACK ? WHITE : BLACK; }
+
+// Turn a color number into its display name.
+function nameOf(player) {
+  return player === BLACK ? GAME_TEXT_AND_SETTINGS.blackName : GAME_TEXT_AND_SETTINGS.whiteName;
+}
+
+// Turn a square number (0–63) into a board coordinate like "D3".
+function squareName(index) {
+  return COLUMN_LETTERS[index % SIZE] + (Math.floor(index / SIZE) + 1);
+}
+
+// Fill in the {placeholders} in a message with real values.
+function fillMessage(template, values) {
+  return template.replace(/\{(\w+)\}/g, (whole, key) => (key in values ? values[key] : whole));
+}
+
+// =====================================================================
+// GAME RULES
+// These functions know the rules of Othello. They never touch the page;
+// they only look at a board list and answer questions about it.
+// =====================================================================
+
+// Make the starting board: four stones in the middle in an X pattern.
+// White on D4 and E5, Black on E4 and D5 (the standard setup).
+function makeStartingBoard() {
+  const board = new Array(SIZE * SIZE).fill(EMPTY);
+  board[3 * SIZE + 3] = WHITE; // D4
+  board[3 * SIZE + 4] = BLACK; // E4
+  board[4 * SIZE + 3] = BLACK; // D5
+  board[4 * SIZE + 4] = WHITE; // E5
+  return board;
+}
+
+// If `player` placed a stone on square `index`, which opponent stones would flip?
+// We walk out from the square in all eight directions. In each direction we
+// collect opponent stones until we hit one of our own stones (a sandwich: keep
+// those stones) or an empty square / the edge (no sandwich: throw them away).
+// Each flipped stone is stored with its distance so flips can ripple outward.
+function stonesFlippedBy(board, index, player) {
+  if (board[index] !== EMPTY) return [];
+  const row = Math.floor(index / SIZE), col = index % SIZE;
+  const enemy = opponentOf(player);
+  const flipped = [];
+  for (const [dRow, dCol] of DIRECTIONS) {
+    const line = [];
+    let r = row + dRow, c = col + dCol;
+    // Keep stepping while we are on the board and seeing opponent stones
+    while (r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r * SIZE + c] === enemy) {
+      line.push({ index: r * SIZE + c, distance: line.length + 1 });
+      r += dRow; c += dCol;
+    }
+    // The line only counts if it ends in one of our own stones, with at least one enemy stone between
+    if (line.length > 0 && r >= 0 && r < SIZE && c >= 0 && c < SIZE && board[r * SIZE + c] === player) {
+      flipped.push(...line);
+    }
+  }
+  return flipped;
+}
+
+// List every legal move for a player. A move is legal only if it flips at least one stone.
+function legalMovesFor(board, player) {
+  const moves = [];
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] !== EMPTY) continue;
+    const flips = stonesFlippedBy(board, i, player);
+    if (flips.length) moves.push({ index: i, flips });
+  }
+  return moves;
+}
+
+// Return a NEW board with the move applied: the new stone plus every flipped stone.
+// (We copy the board so the computer can "imagine" moves without changing the real game.)
+function boardAfterMove(board, move, player) {
+  const next = board.slice();
+  next[move.index] = player;
+  for (const f of move.flips) next[f.index] = player;
+  return next;
+}
+
+// Count the stones of each color.
+function countStones(board) {
+  let black = 0, white = 0;
+  for (const v of board) { if (v === BLACK) black++; else if (v === WHITE) white++; }
+  return { black, white };
+}
+
+// =====================================================================
+// COMPUTER PLAYERS
+// =====================================================================
+
+// EASY: usually picks any legal move at random. Sometimes it grabs whichever
+// move flips the most stones right now, which is a beginner's habit and
+// often a mistake.
+function chooseEasyMove(board, player) {
+  const moves = legalMovesFor(board, player);
+  if (Math.random() < GAME_TEXT_AND_SETTINGS.easyRandomChance) {
+    return moves[Math.floor(Math.random() * moves.length)];
+  }
+  let best = moves[0];
+  for (const m of moves) if (m.flips.length > best.flips.length) best = m;
+  return best;
+}
+
+// How good a board looks for `player`, as one number (higher is better).
+// It adds up the value of squares each side holds, and adds a bonus for
+// having more possible moves than the opponent (more choices = more control).
+function scoreBoardFor(board, player) {
+  const enemy = opponentOf(player);
+  let positional = 0;
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] === player) positional += SQUARE_VALUES[i];
+    else if (board[i] === enemy) positional -= SQUARE_VALUES[i];
+  }
+  const myMoves = legalMovesFor(board, player).length;
+  const theirMoves = legalMovesFor(board, enemy).length;
+  return positional + 6 * (myMoves - theirMoves);
+}
+
+// Look ahead several moves. This is the "minimax" idea in its compact
+// "negamax" form: I pick the move that is best for me, assuming my opponent
+// will then pick the move that is best for them, and so on.
+// "alpha" and "beta" let us skip branches that clearly can't matter (alpha-beta pruning),
+// which makes the search much faster without changing the answer.
+function lookAhead(board, player, depth, alpha, beta) {
+  const moves = legalMovesFor(board, player);
+  const enemy = opponentOf(player);
+
+  if (moves.length === 0) {
+    // No moves for me. If my opponent also has none, the game is over:
+    // score it by the final stone difference, made huge so a real win beats any position.
+    if (legalMovesFor(board, enemy).length === 0) {
+      const { black, white } = countStones(board);
+      const diff = player === BLACK ? black - white : white - black;
+      return diff * 1000;
+    }
+    // Otherwise I must pass, and it's my opponent's turn.
+    return -lookAhead(board, enemy, depth - 1, -beta, -alpha);
+  }
+
+  if (depth <= 0) return scoreBoardFor(board, player);
+
+  // Try the most promising squares first (corners, edges); this helps the pruning.
+  moves.sort((a, b) => SQUARE_VALUES[b.index] - SQUARE_VALUES[a.index]);
+
+  let best = -Infinity;
+  for (const move of moves) {
+    const score = -lookAhead(boardAfterMove(board, move, player), enemy, depth - 1, -beta, -alpha);
+    if (score > best) best = score;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break; // the opponent would never allow this line, stop looking
+  }
+  return best;
+}
+
+// MEDIUM: looks a short way ahead using the same square values as Hard,
+// but not as far, never plays the ending perfectly, and now and then slips
+// and plays a random legal move.
+function chooseMediumMove(board, player) {
+  const moves = legalMovesFor(board, player);
+  if (Math.random() < GAME_TEXT_AND_SETTINGS.mediumSlipChance) {
+    return moves[Math.floor(Math.random() * moves.length)];
+  }
+  const depth = GAME_TEXT_AND_SETTINGS.mediumLookAhead;
+  let bestScore = -Infinity, bestMoves = [];
+  for (const move of moves) {
+    const score = -lookAhead(boardAfterMove(board, move, player), opponentOf(player), depth - 1, -Infinity, Infinity);
+    if (score > bestScore) { bestScore = score; bestMoves = [move]; }
+    else if (score === bestScore) bestMoves.push(move);
+  }
+  return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+}
+
+// HARD: tries every legal move, looks ahead, and keeps the best one.
+// Near the end of the game it searches all the way to the final position.
+function chooseHardMove(board, player) {
+  const moves = legalMovesFor(board, player);
+  const emptySquares = board.filter(v => v === EMPTY).length;
+  const depth = emptySquares <= GAME_TEXT_AND_SETTINGS.hardPerfectEndgameAt
+    ? emptySquares
+    : GAME_TEXT_AND_SETTINGS.hardLookAhead;
+
+  let bestScore = -Infinity, bestMoves = [];
+  for (const move of moves) {
+    const score = -lookAhead(boardAfterMove(board, move, player), opponentOf(player), depth - 1, -Infinity, Infinity);
+    if (score > bestScore) { bestScore = score; bestMoves = [move]; }
+    else if (score === bestScore) bestMoves.push(move);
+  }
+  // If several moves are equally good, pick one at random so games vary
+  return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+}
+
+// =====================================================================
+// GAME STATE
+// Everything about the game in progress is kept in this one object.
+// =====================================================================
+const game = {
+  board: makeStartingBoard(),
+  current: BLACK,          // whose turn it is
+  mode: "easy",            // "easy", "hard" or "friend"
+  humanColor: BLACK,       // which color the person plays (vs. computer only)
+  over: false,
+  movesMade: 0,
+  lastMove: -1,
+  computerTimer: null,     // the pending "computer moves after a pause" timer
+  focusIndex: 2 * SIZE + 3, // which square the keyboard cursor is on (starts near the middle, D3)
+  hintIndex: -1,           // the square the Hint button is pointing at (-1 means no hint showing)
+  moveList: [],            // every move so far, in order, like ["d3", "c5"] (used for the shareable link)
+  history: []              // saved copies of the game from just before each of the person's moves (for Undo)
+};
+
+// Is it a person's turn right now (rather than the computer's)?
+function isPersonTurn() {
+  return game.mode === "friend" || game.current === game.humanColor;
+}
+
+// =====================================================================
+// SCOREBOARD (saved in this browser with localStorage)
+// Reads and writes are wrapped in try/catch because some browsers
+// (private windows, blocked storage) refuse localStorage.
+// =====================================================================
+// The three computer levels that have a row on the scoreboard
+const SCORE_LEVELS = ["easy", "medium", "hard"];
+
+function emptyScores() {
+  const scores = {};
+  for (const level of SCORE_LEVELS) scores[level] = { w: 0, l: 0, d: 0 };
+  return scores;
+}
+
+function loadScores() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GAME_TEXT_AND_SETTINGS.storageKey));
+    if (saved && typeof saved === "object") {
+      // Start from zeros, then copy in any levels that were saved before.
+      // (Scores saved before Medium existed simply get a fresh Medium row.)
+      const scores = emptyScores();
+      for (const level of SCORE_LEVELS) if (saved[level]) Object.assign(scores[level], saved[level]);
+      return scores;
+    }
+  } catch (e) { /* storage unavailable: start from zero */ }
+  return emptyScores();
+}
+
+function saveScores(scores) {
+  try { localStorage.setItem(GAME_TEXT_AND_SETTINGS.storageKey, JSON.stringify(scores)); }
+  catch (e) { /* storage unavailable: scores last only until the page closes */ }
+}
+
+let scores = loadScores();
+
+// Copy the score numbers into the table on the page.
+function showScores() {
+  for (const level of SCORE_LEVELS) {
+    for (const key of ["w", "l", "d"]) {
+      document.getElementById(`${level}-${key}`).textContent = scores[level][key];
+    }
+  }
+}
+
+// =====================================================================
+// PAGE ELEMENTS
+// =====================================================================
+const boardEl = document.getElementById("board");
+const statusText = document.getElementById("status-text");
+const statusSwatch = document.getElementById("status-swatch");
+const statusBox = document.getElementById("status");
+const noticeEl = document.getElementById("notice");
+const announcer = document.getElementById("announcer");
+const settingsNote = document.getElementById("settings-note");
+const buddyCard = document.getElementById("buddy-card");
+const speechEl = document.getElementById("speech");
+const undoBtn = document.getElementById("undo");
+const hintBtn = document.getElementById("hint");
+const cells = [];   // the 64 square elements
+const pieces = [];  // the stone holder inside each square (used for the "pop" when placed)
+const discs = [];   // the two-sided disc inside each holder (turned to flip)
+
+// Build the board once: coordinate labels, star points and 64 squares.
+// After this we only update classes and labels, which lets the flip animation run.
+function buildBoard() {
+  const top = document.getElementById("coords-top");
+  const left = document.getElementById("coords-left");
+  for (let i = 0; i < SIZE; i++) {
+    top.insertAdjacentHTML("beforeend", `<span>${COLUMN_LETTERS[i]}</span>`);
+    left.insertAdjacentHTML("beforeend", `<span>${i + 1}</span>`);
+  }
+
+  // The four star points sit on the grid corners around the central 4x4 area
+  for (const [x, y] of [[25, 25], [75, 25], [25, 75], [75, 75]]) {
+    const dot = document.createElement("span");
+    dot.className = "star";
+    dot.style.left = x + "%"; dot.style.top = y + "%";
+    dot.setAttribute("aria-hidden", "true");
+    boardEl.appendChild(dot);
+  }
+
+  // Each grid row gets role="row" via display:contents so the grid stays 8 columns wide
+  for (let r = 0; r < SIZE; r++) {
+    const rowEl = document.createElement("div");
+    rowEl.setAttribute("role", "row");
+    rowEl.style.display = "contents";
+    for (let c = 0; c < SIZE; c++) {
+      const i = r * SIZE + c;
+      const cell = document.createElement("div");
+      cell.className = "cell";
+      cell.setAttribute("role", "gridcell");
+      cell.tabIndex = -1;
+      cell.dataset.index = i;
+      cell.innerHTML = '<div class="piece" hidden><div class="disc"><div class="face black"></div><div class="face white"></div></div></div>';
+      rowEl.appendChild(cell);
+      cells.push(cell);
+      pieces.push(cell.firstElementChild);
+      discs.push(cell.querySelector(".disc"));
+    }
+    boardEl.appendChild(rowEl);
+  }
+}
+
+// =====================================================================
+// DRAWING THE GAME
+// Bring the page up to date with the game object.
+// `placed` is the square just played (it pops in instead of flipping).
+// `flips` are the stones just turned (they flip with a ripple).
+// `instant` skips all animation (used when starting a new game).
+// =====================================================================
+function draw({ placed = -1, flips = [], instant = false } = {}) {
+  const flipDistance = new Map(flips.map(f => [f.index, f.distance]));
+  const showHints = !game.over && isPersonTurn();
+  const legal = showHints ? new Set(legalMovesFor(game.board, game.current).map(m => m.index)) : new Set();
+
+  for (let i = 0; i < cells.length; i++) {
+    const value = game.board[i];
+    const disc = discs[i], piece = pieces[i], cell = cells[i];
+
+    if (value === EMPTY) {
+      piece.hidden = true;
+    } else {
+      piece.hidden = false;
+      const wantWhite = value === WHITE;
+      if (instant || i === placed) {
+        // Set the color with no turning animation
+        disc.style.transition = "none";
+        disc.classList.toggle("is-white", wantWhite);
+        void disc.offsetWidth; // forces the browser to apply the change right now
+        disc.style.transition = "";
+        disc.style.transitionDelay = "0ms";
+        if (i === placed) { piece.classList.remove("pop"); void piece.offsetWidth; piece.classList.add("pop"); }
+      } else if (flipDistance.has(i)) {
+        // Flip it, waiting a little longer the farther it is from the new stone
+        disc.style.transitionDelay = ((flipDistance.get(i) - 1) * GAME_TEXT_AND_SETTINGS.flipRippleMs) + "ms";
+        disc.classList.toggle("is-white", wantWhite);
+      } else {
+        disc.classList.toggle("is-white", wantWhite);
+      }
+    }
+
+    // Hints, last-move marker and the keyboard cursor
+    cell.classList.toggle("hint", legal.has(i));
+    cell.classList.toggle("hint-white", legal.has(i) && game.current === WHITE);
+    cell.classList.toggle("last", i === game.lastMove);
+    cell.classList.toggle("suggested", i === game.hintIndex);
+    cell.tabIndex = i === game.focusIndex ? 0 : -1;
+
+    // What a screen reader says for this square
+    let label = squareName(i) + ", ";
+    label += value === BLACK ? "black stone" : value === WHITE ? "white stone" : "empty";
+    if (legal.has(i)) label += ", you can play here";
+    if (i === game.lastMove) label += ", last move";
+    if (i === game.hintIndex) label += ", suggested move";
+    cell.setAttribute("aria-label", label);
+  }
+
+  // Stone counts, with the current player's box highlighted
+  const { black, white } = countStones(game.board);
+  document.getElementById("black-count").textContent = black;
+  document.getElementById("white-count").textContent = white;
+  document.getElementById("count-black").classList.toggle("active", !game.over && game.current === BLACK);
+  document.getElementById("count-white").classList.toggle("active", !game.over && game.current === WHITE);
+
+  boardEl.setAttribute("aria-busy", String(!game.over && !isPersonTurn()));
+
+  // Undo is available when there is a move to take back and the game isn't over
+  // (once a game ends its result is already on the scoreboard, so it can't be undone)
+  undoBtn.disabled = game.over || game.history.length === 0;
+
+  // Hint is available only when it's a person's turn and the game is still going
+  hintBtn.disabled = game.over || !isPersonTurn();
+
+  // Keep the page link up to date with the moves so far
+  updateGameLink();
+}
+
+// Show the main status line (whose turn, or who won).
+function setStatus(text, swatchPlayer, isOver = false) {
+  statusText.textContent = text;
+  statusSwatch.className = "swatch " + (swatchPlayer === BLACK ? "black" : swatchPlayer === WHITE ? "white" : "none");
+  statusBox.classList.toggle("over", isOver);
+}
+
+// Say something to screen-reader users only.
+function announce(text) {
+  announcer.textContent = "";
+  setTimeout(() => { announcer.textContent = text; }, 30);
+}
+
+// =====================================================================
+// THE COMPUTER'S COMMENTS
+// The comment shows in the speech bubble beside the board. That bubble is
+// a live region, so screen readers read each new comment aloud.
+// =====================================================================
+let lastLineSaid = "";      // remembered so the same line isn't said twice in a row
+let commentTimer = null;    // the pending "say this in a moment" timer
+
+// Pick a random line from one of the lists, avoiding the line said last time.
+function pickLine(listName) {
+  const list = GAME_TEXT_AND_SETTINGS.computerLines[listName] || [];
+  if (list.length === 0) return "";
+  const choices = list.length > 1 ? list.filter(line => line !== lastLineSaid) : list;
+  const line = choices[Math.floor(Math.random() * choices.length)];
+  lastLineSaid = line;
+  return line;
+}
+
+// Show a line in the bubble after a short pause (or right away if delay is 0).
+function computerSays(listName, delay = GAME_TEXT_AND_SETTINGS.computerCommentDelayMs) {
+  clearTimeout(commentTimer);
+  const line = pickLine(listName);
+  if (!line) return;
+  commentTimer = setTimeout(() => {
+    speechEl.textContent = line;
+    // Restart the small fade-in each time the computer speaks
+    speechEl.classList.remove("fresh"); void speechEl.offsetWidth; speechEl.classList.add("fresh");
+  }, delay);
+}
+
+// Decide whether the computer comments on the move it just made, and which kind.
+function commentOnComputerMove(move) {
+  const corners = [0, 7, 56, 63];
+  if (corners.includes(move.index)) computerSays("corner");
+  else if (move.flips.length >= GAME_TEXT_AND_SETTINGS.bigFlipSize) computerSays("bigFlip");
+  else if (Math.random() < GAME_TEXT_AND_SETTINGS.computerChattiness) computerSays("move");
+}
+
+// Show the computer's name, its level, and hide the whole card when two people play.
+function setUpComputerCard() {
+  const name = GAME_TEXT_AND_SETTINGS.computerName;
+  const levelNames = { easy: "Easy", medium: "Medium", hard: "Hard" };
+  document.getElementById("buddy-name").textContent = name;
+  document.getElementById("buddy-initial").textContent = name.charAt(0).toUpperCase();
+  document.getElementById("buddy-level").textContent = "Your opponent · " + (levelNames[game.mode] || "");
+  buddyCard.hidden = game.mode === "friend";
+  clearTimeout(commentTimer);
+  speechEl.textContent = "";
+  if (game.mode !== "friend") computerSays("hello", 300);
+}
+
+// =====================================================================
+// TURN FLOW
+// =====================================================================
+
+// Start a fresh game using whatever is chosen in Settings.
+function startNewGame() {
+  clearTimeout(game.computerTimer);
+  game.mode = document.querySelector('input[name="mode"]:checked').value;
+  game.humanColor = document.querySelector('input[name="color"]:checked').value === "white" ? WHITE : BLACK;
+  game.board = makeStartingBoard();
+  game.current = BLACK;
+  game.over = false;
+  game.movesMade = 0;
+  game.lastMove = -1;
+  game.history = [];
+  game.hintIndex = -1;
+  game.moveList = [];
+  noticeEl.textContent = "";
+  settingsNote.textContent = GAME_TEXT_AND_SETTINGS.messages.settingsNote;
+  setUpComputerCard();
+  draw({ instant: true });
+  beginTurn();
+}
+
+// Work out what happens at the start of a turn: maybe the player must pass,
+// maybe the game is over, maybe the computer needs to move.
+function beginTurn() {
+  const msg = GAME_TEXT_AND_SETTINGS.messages;
+  if (legalMovesFor(game.board, game.current).length === 0) {
+    const other = opponentOf(game.current);
+    if (legalMovesFor(game.board, other).length === 0) { finishGame(); return; }
+    // This player has no legal move, so they pass and the other player goes again
+    const passText = fillMessage(msg.pass, { player: nameOf(game.current) });
+    noticeEl.textContent = passText;
+    announce(passText);
+    game.current = other;
+    draw();
+  }
+
+  if (isPersonTurn()) {
+    const text = game.mode === "friend"
+      ? fillMessage(msg.friendTurn, { player: nameOf(game.current) })
+      : fillMessage(msg.yourTurn, { player: nameOf(game.current) });
+    setStatus(text, game.current);
+  } else {
+    // The computer waits a moment so the person can see their own move land
+    setStatus(msg.computerThinking, game.current);
+    game.computerTimer = setTimeout(computerTakesTurn, GAME_TEXT_AND_SETTINGS.computerPauseMs);
+  }
+}
+
+// Place a stone for the current player and move on to the next turn.
+function playMove(move) {
+  const player = game.current;
+  game.board = boardAfterMove(game.board, move, player);
+  game.lastMove = move.index;
+  game.movesMade++;
+  game.hintIndex = -1; // any hint is out of date once a stone is placed
+  game.moveList.push(squareName(move.index).toLowerCase()); // remember it for the link
+  game.current = opponentOf(player);
+  draw({ placed: move.index, flips: move.flips });
+  announce(fillMessage(GAME_TEXT_AND_SETTINGS.messages.moveSpoken, {
+    player: nameOf(player),
+    square: squareName(move.index),
+    count: move.flips.length === 1 ? "1 stone" : move.flips.length + " stones"
+  }));
+  beginTurn();
+}
+
+// The computer picks and plays its move.
+function computerTakesTurn() {
+  if (game.over || isPersonTurn()) return;
+  // Pick the move using the chosen level's way of thinking
+  const move = game.mode === "hard" ? chooseHardMove(game.board, game.current)
+    : game.mode === "medium" ? chooseMediumMove(game.board, game.current)
+    : chooseEasyMove(game.board, game.current);
+  playMove(move);
+  // A friendly remark after some moves (skipped if that move ended the game,
+  // because the win/lose line takes over)
+  if (!game.over) commentOnComputerMove(move);
+}
+
+// A person clicked a square or pressed Enter on it.
+function personTriesSquare(index) {
+  if (game.over || !isPersonTurn()) return;
+  const flips = stonesFlippedBy(game.board, index, game.current);
+  if (flips.length === 0) {
+    if (game.board[index] === EMPTY) {
+      const text = fillMessage(GAME_TEXT_AND_SETTINGS.messages.notValid, { square: squareName(index) });
+      noticeEl.textContent = text;
+      announce(text);
+    }
+    return;
+  }
+  noticeEl.textContent = "";
+  // Save a copy of the game as it is right now, so Undo can come back to this point
+  game.history.push({
+    board: game.board.slice(),
+    current: game.current,
+    lastMove: game.lastMove,
+    movesMade: game.movesMade,
+    moveList: game.moveList.slice()
+  });
+  playMove({ index, flips });
+}
+
+// UNDO: go back to just before the person's most recent move.
+// Against the computer this also takes back the computer's reply, because the
+// saved copy was made before either of those moves happened.
+// In two-player games it takes back just the last move.
+function undoLastMove() {
+  if (game.over || game.history.length === 0) return;
+  clearTimeout(game.computerTimer);   // stop the computer if it was about to move
+  clearTimeout(commentTimer);         // and stop any comment it was about to make
+  const saved = game.history.pop();
+  game.board = saved.board;
+  game.current = saved.current;
+  game.lastMove = saved.lastMove;
+  game.movesMade = saved.movesMade;
+  game.moveList = saved.moveList;
+  game.hintIndex = -1;
+  noticeEl.textContent = GAME_TEXT_AND_SETTINGS.messages.undone;
+  announce(GAME_TEXT_AND_SETTINGS.messages.undone + " " + nameOf(game.current) + " to play.");
+  draw({ instant: true });
+  beginTurn();
+}
+
+// Neither side can move: count stones, announce the result, update the scoreboard.
+function finishGame() {
+  game.over = true;
+  const msg = GAME_TEXT_AND_SETTINGS.messages;
+  const { black, white } = countStones(game.board);
+  const values = { black, white };
+  let text, swatch = null;
+
+  if (black === white) {
+    text = fillMessage(msg.draw, values);
+  } else {
+    const winner = black > white ? BLACK : WHITE;
+    swatch = winner;
+    // Always state the winner's count first
+    const high = Math.max(black, white), low = Math.min(black, white);
+    if (game.mode === "friend") {
+      text = fillMessage(msg.playerWins, { player: nameOf(winner), black: high, white: low });
+    } else if (winner === game.humanColor) {
+      text = fillMessage(msg.youWin, { black: high, white: low });
+    } else {
+      text = fillMessage(msg.computerWins, { black: high, white: low });
+    }
+  }
+
+  // Record the result if this was a game against the computer
+  if (game.mode !== "friend") {
+    const tally = scores[game.mode];
+    if (black === white) tally.d++;
+    else if ((black > white ? BLACK : WHITE) === game.humanColor) tally.w++;
+    else tally.l++;
+    saveScores(scores);
+    showScores();
+  }
+
+  // The computer reacts to the result: a different line for winning, losing or a draw
+  if (game.mode !== "friend") {
+    if (black === white) computerSays("draw");
+    else if ((black > white ? BLACK : WHITE) === game.humanColor) computerSays("lose");
+    else computerSays("win");
+  }
+
+  setStatus(text, swatch, true);
+  draw();
+}
+
+// =====================================================================
+// KEYBOARD AND MOUSE / TOUCH
+// =====================================================================
+
+// Move the keyboard cursor to a square and focus it.
+function moveFocus(index) {
+  cells[game.focusIndex].tabIndex = -1;
+  game.focusIndex = index;
+  cells[index].tabIndex = 0;
+  cells[index].focus();
+}
+
+// Clicks and taps: play on the square that was touched.
+boardEl.addEventListener("click", (event) => {
+  const cell = event.target.closest(".cell");
+  if (!cell) return;
+  const index = Number(cell.dataset.index);
+  game.focusIndex = index;
+  draw();
+  personTriesSquare(index);
+});
+
+// Arrow keys move around the board; Home/End jump to the row's ends;
+// Enter or Space plays on the chosen square.
+boardEl.addEventListener("keydown", (event) => {
+  const i = game.focusIndex;
+  const row = Math.floor(i / SIZE), col = i % SIZE;
+  let next = null;
+  switch (event.key) {
+    case "ArrowUp":    next = row > 0 ? i - SIZE : i; break;
+    case "ArrowDown":  next = row < SIZE - 1 ? i + SIZE : i; break;
+    case "ArrowLeft":  next = col > 0 ? i - 1 : i; break;
+    case "ArrowRight": next = col < SIZE - 1 ? i + 1 : i; break;
+    case "Home":       next = row * SIZE; break;
+    case "End":        next = row * SIZE + SIZE - 1; break;
+    case "Enter":
+    case " ":
+      event.preventDefault();
+      personTriesSquare(i);
+      return;
+    default: return;
+  }
+  event.preventDefault();
+  moveFocus(next);
+});
+
+// =====================================================================
+// BUTTONS AND SETTINGS
+// =====================================================================
+document.getElementById("new-game").addEventListener("click", startNewGame);
+undoBtn.addEventListener("click", undoLastMove);
+
+// HINT: ask the Hard computer which move it would make if it were playing your color,
+// then highlight that square, move the keyboard cursor onto it (so Enter plays it),
+// and say it in words for screen readers.
+function showHint() {
+  if (game.over || !isPersonTurn()) return;
+  const move = chooseHardMove(game.board, game.current);
+  if (!move) return;
+  game.hintIndex = move.index;
+  game.focusIndex = move.index;
+  draw();
+  const text = fillMessage(GAME_TEXT_AND_SETTINGS.messages.hint, { square: squareName(move.index) });
+  noticeEl.textContent = text;
+  announce(text);
+}
+hintBtn.addEventListener("click", showHint);
+
+// When a setting changes: if nobody has moved yet, restart right away with the
+// new setting. Otherwise keep the current game and say to press New game.
+function settingsChanged() {
+  const friend = document.getElementById("mode-friend").checked;
+  document.getElementById("color-set").disabled = friend; // color choice only matters vs. the computer
+  if (game.movesMade === 0 || game.over) startNewGame();
+  else settingsNote.textContent = GAME_TEXT_AND_SETTINGS.messages.settingsWait;
+}
+document.querySelectorAll('input[name="mode"], input[name="color"]').forEach(input => {
+  input.addEventListener("change", settingsChanged);
+});
+
+// Reset scores, with an on-page "are you sure?" step
+const resetBtn = document.getElementById("reset-scores");
+const confirmBox = document.getElementById("confirm-reset");
+resetBtn.addEventListener("click", () => {
+  resetBtn.hidden = true; confirmBox.hidden = false;
+  document.getElementById("confirm-no").focus();
+});
+document.getElementById("confirm-no").addEventListener("click", () => {
+  confirmBox.hidden = true; resetBtn.hidden = false; resetBtn.focus();
+});
+document.getElementById("confirm-yes").addEventListener("click", () => {
+  scores = emptyScores(); saveScores(scores); showScores();
+  confirmBox.hidden = true; resetBtn.hidden = false; resetBtn.focus();
+  announce("Scores cleared.");
+});
+
+// =====================================================================
+// SHAREABLE GAME LINKS
+// The moves so far are written at the end of the page link, after a #,
+// as square names run together: #game-d3c5f6 means D3, then C5, then F6.
+// Passes aren't written down; they're worked out again when the game is replayed.
+// Nothing is sent anywhere: the link itself carries the game.
+// =====================================================================
+const LINK_PREFIX = "#game-";
+
+// Turn the move list into the end of the link (or nothing, before the first move).
+function currentLinkHash() {
+  return game.moveList.length ? LINK_PREFIX + game.moveList.join("") : "";
+}
+
+// Rewrite the end of the link to match the game. location.replace changes the
+// link without adding a new entry to the browser's Back history for every move.
+function updateGameLink() {
+  const wanted = currentLinkHash();
+  if (location.hash === wanted || (!wanted && !location.hash)) return;
+  try {
+    if (wanted) location.replace(wanted);
+    else history.replaceState(null, "", location.pathname + location.search);
+  } catch (e) { /* some browsers block this inside frames; the game still works */ }
+}
+
+// Rebuild a game from a link. Each move is checked against the rules as it is
+// replayed, so a mistyped or tampered link can't create an impossible board.
+// Returns true if the whole link replayed correctly.
+function loadGameFromLink(hash) {
+  const code = hash.slice(LINK_PREFIX.length).toLowerCase();
+  const squares = code.match(/[a-h][1-8]/g) || [];
+  if (squares.join("") !== code || squares.length === 0) return false;
+
+  // A shared game is always continued as two players on this screen
+  document.getElementById("mode-friend").checked = true;
+  document.getElementById("color-set").disabled = true;
+
+  clearTimeout(game.computerTimer);
+  game.mode = "friend";
+  game.board = makeStartingBoard();
+  game.current = BLACK;
+  game.over = false;
+  game.movesMade = 0;
+  game.lastMove = -1;
+  game.history = [];
+  game.hintIndex = -1;
+  game.moveList = [];
+
+  for (const sq of squares) {
+    // If the player to move has no legal move, they pass (unless nobody can move: the link is wrong)
+    if (legalMovesFor(game.board, game.current).length === 0) {
+      if (legalMovesFor(game.board, opponentOf(game.current)).length === 0) return false;
+      game.current = opponentOf(game.current);
+    }
+    const index = COLUMN_LETTERS.indexOf(sq[0].toUpperCase()) + (Number(sq[1]) - 1) * SIZE;
+    const flips = stonesFlippedBy(game.board, index, game.current);
+    if (flips.length === 0) return false; // not a legal move: the link is wrong
+    // Save an Undo point, exactly as a normal move does, so Undo works on shared games too
+    game.history.push({ board: game.board.slice(), current: game.current, lastMove: game.lastMove,
+                        movesMade: game.movesMade, moveList: game.moveList.slice() });
+    game.board = boardAfterMove(game.board, { index, flips }, game.current);
+    game.lastMove = index;
+    game.movesMade++;
+    game.moveList.push(sq);
+    game.current = opponentOf(game.current);
+  }
+
+  settingsNote.textContent = GAME_TEXT_AND_SETTINGS.messages.settingsNote;
+  setUpComputerCard();
+  draw({ instant: true });
+  noticeEl.textContent = fillMessage(GAME_TEXT_AND_SETTINGS.messages.loadedShared,
+    { count: squares.length === 1 ? "1 move" : squares.length + " moves" });
+  announce(noticeEl.textContent);
+  beginTurn();
+  return true;
+}
+
+// Start the page: replay a shared game if the link has one, otherwise start fresh.
+function startFromLink() {
+  const hash = location.hash;
+  if (hash.startsWith(LINK_PREFIX)) {
+    if (loadGameFromLink(hash)) return;
+    startNewGame();
+    noticeEl.textContent = GAME_TEXT_AND_SETTINGS.messages.badLink;
+    return;
+  }
+  startNewGame();
+}
+
+// If someone pastes a different game link into the address bar of an open page, load it.
+// (Our own link updates also fire this event, so ignore ones that match the game already showing.)
+window.addEventListener("hashchange", () => {
+  if (location.hash === currentLinkHash()) return;
+  if (location.hash.startsWith(LINK_PREFIX)) startFromLink();
+});
+
+// =====================================================================
+// SHARE GAME BUTTON
+// Builds the full link (page address + the moves) and copies it.
+// =====================================================================
+const shareBtn = document.getElementById("share");
+const shareBox = document.getElementById("share-box");
+const shareInput = document.getElementById("share-link");
+
+// Work out the page's address. When the page is open in its own tab we can read
+// it directly. When it's shown inside another page (like the Claude viewer),
+// the address we can see isn't the one a friend can open, so use shareBaseLink.
+function pageAddress() {
+  let insideAnotherPage = true;
+  try { insideAnotherPage = window.top !== window.self; } catch (e) { /* blocked: assume inside */ }
+  if (!insideAnotherPage && /^https?:|^file:/.test(location.protocol)) {
+    return location.href.split("#")[0];
+  }
+  return GAME_TEXT_AND_SETTINGS.shareBaseLink;
+}
+
+let shareResetTimer = null;
+
+// Copy the link. If the browser refuses, show it in a box, already selected.
+function shareGame() {
+  const msg = GAME_TEXT_AND_SETTINGS.messages;
+  const link = pageAddress() + currentLinkHash();
+  shareInput.value = link;
+
+  // What to do when copying worked: say so on the button and in words
+  const copied = () => {
+    shareBox.hidden = true;
+    noticeEl.textContent = msg.linkCopied;
+    announce(msg.linkCopied);
+    shareBtn.textContent = msg.copyButtonDone;
+    clearTimeout(shareResetTimer);
+    shareResetTimer = setTimeout(() => { shareBtn.textContent = "Share game"; }, 2000);
+  };
+
+  // What to do when copying failed: show the link selected, ready for Ctrl+C
+  const fallback = () => {
+    shareBox.hidden = false;
+    shareInput.focus();
+    shareInput.select();
+    // One more try with the older copy command, which some browsers still allow
+    let worked = false;
+    try { worked = document.execCommand("copy"); } catch (e) { worked = false; }
+    if (worked) { copied(); return; }
+    noticeEl.textContent = msg.copyFallback;
+    announce(msg.copyFallback);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(copied, fallback);
+  } else {
+    fallback();
+  }
+}
+shareBtn.addEventListener("click", shareGame);
+
+// =====================================================================
+// START
+// =====================================================================
+buildBoard();
+showScores();
+startFromLink();
+</script>
