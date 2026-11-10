@@ -1,0 +1,2800 @@
+<!DOCTYPE html>
+<!--
+  Caterpillar Harvest  (grew out of "Glowing Caterpillars")
+  ===================
+  A cartoon garden game: glowing green caterpillars crawl into the garden and eat
+  vegetables. Harvest the ripe ones before they get eaten. Five levels, each with
+  one more caterpillar.
+
+  LIBRARIES USED
+  - Fredoka (variable font), version 5.2.10, by Fontsource
+      Source: https://cdn.jsdelivr.net/npm/@fontsource-variable/fredoka@5.2.10/wght.css (jsDelivr)
+      What it does: the round, friendly cartoon lettering. Only the font file is downloaded;
+      if it can't load, the game uses a rounded font already on the computer instead.
+  Everything else is plain HTML, CSS and vanilla JavaScript. The sound effects are made on the
+  spot by the browser's own Web Audio feature, so there are no sound files.
+
+  PRIVACY: nothing about you or your game is sent to any server. Progress, high score,
+           stats and the sound on/off choice are saved only in this browser (localStorage).
+
+  VERSION HISTORY
+  // v1.0 - 2026-11-01 - initial build: canvas animation, start screen, pause (button, P key,
+  //                     auto-pause on tab switch), mouse/touch/keyboard controls, 4 color modes,
+  //                     bounce-or-pass-under meetings, reduced-motion support, settings list.
+  // v1.1 - 2026-11-01 - added an on-screen Settings panel with sliders for speed, length and width.
+  // v1.2 - 2026-11-10 - remembers color mode, speed, length and width in this browser (localStorage),
+  //                     added a "Reset to defaults" button; still works if the browser blocks saving.
+  // v1.3 - 2026-11-10 - Settings panel no longer hides under the top bar when it wraps on phones/tablets.
+  // v2.0 - 2026-11-10 - turned into the game "Caterpillar Harvest": garden of vegetables, 5 levels,
+  //                     harvesting with tap/click or keyboard, "+1" animation, score and level in a
+  //                     basket, title / level-cleared / game-over screens, saved progress and
+  //                     all-time high score. Settings panel now only changes caterpillar colors.
+  // v2.1 - 2026-11-10 - harder: caterpillars start faster (34 instead of 22). Speed now set by two
+  //                     settings at the very top of GAME: startSpeed and speedUpPerLevel.
+  // v2.2 - 2026-11-10 - every action now gets a response: vegetable pop + sparkle burst + basket bounce
+  //                     on harvest, wobble on "not ripe", ripple on taps, red flash + crumbs + chomp when
+  //                     eaten, sparkle when a vegetable ripens, star burst when caterpillars bump, pop on
+  //                     keyboard selection, glow on color change, level banner, confetti, shake on losing,
+  //                     springy buttons and screens. Reduced motion: all movement off, gentle fades only.
+  // v2.3 - 2026-11-10 - rare golden vegetables worth 3 points appear from level 2 on (golden glow and
+  //                     twinkles, bigger "+3" burst). Set with rareFromLevel, rareChance, rareVegetables.
+  // v2.4 - 2026-11-10 - extremely rare crystal vegetables worth 5 points from level 4 on (violet glow,
+  //                     5 stars, biggest burst). Both kinds now live in one specialVegetables list.
+  // v2.5 - 2026-11-10 - caterpillars now crawl in from random spots on the left and right edges, cross
+  //                     the garden, and come back in from a new random side spot after leaving.
+  // v2.6 - 2026-11-10 - each vegetable kind has its own ripening time (tomatoes fastest, cabbages slowest),
+  //                     rare ones ripen slower (ripenSlower), and each caterpillar heads for the vegetable
+  //                     that will be ripe soonest, picking different ones when it can.
+  // v2.7 - 2026-11-10 - caterpillars are always green (each its own shade, soft stripes); Settings panel and
+  //                     color modes removed. New Stats screen (games played and won, best score, current and
+  //                     longest winning streak) saved in localStorage, with a two-press Reset.
+  // v2.8 - 2026-11-10 - caterpillars move at the same speed on every level (speedUpPerLevel set to 0).
+  // v3.0 - 2026-11-10 - cartoon makeover: round Fredoka lettering, chunky outlined buttons and cards, a wooden
+  //                     top bar, garden beds in the soil, outlined vegetables with shadows, cuter caterpillars
+  //                     (outlines, big shiny eyes, smiles, rosy cheeks). Title, level, end and stats screens
+  //                     now sit in front of a moonlit garden scene (hills, picket fence, vegetable rows,
+  //                     fireflies, a waving mascot caterpillar) on cards that look like seed packets.
+  // v3.1 - 2026-11-10 - caterpillars crawl faster: startSpeed raised from 34 to 46.
+  // v3.2 - 2026-11-10 - caterpillars come in from a random edge (left, right, top or bottom) at a random
+  //                     spot, and leave through the opposite edge.
+  // v3.3 - 2026-11-10 - flower petals drift down instead of confetti. Garden sound effects made by the browser
+  //                     (Web Audio, no sound files): a water-drop "plip" when a vegetable ripens, a wooden
+  //                     "plonk" when you harvest (more notes and birdsong for rare ones), a little tune and
+  //                     birds when you clear a level or win, a low "nom nom" munch when a caterpillar eats,
+  //                     and a droopy "wah-wah" when you lose. Sound starts off; the Sound button (bottom
+  //                     left) turns it on and off and remembers the choice.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Caterpillar Harvest</title>
+  <!-- Fredoka 5.2.10 from jsDelivr: rounded cartoon font (see the library list at the top) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/fredoka@5.2.10/wght.css">
+  <style>
+    :root {
+      /* Cartoon palette */
+      --ink: #3b2a1a;             /* dark brown used for every outline and most text */
+      --paper: #fff6df;           /* seed-packet cream */
+      --paper-2: #f6e7c1;
+      --leaf: #6cc04a;            /* main green */
+      --leaf-dark: #2f6b23;
+      --sun: #ffd166;             /* yellow buttons */
+      --wood: #8a5a2b;
+      --wood-light: #a8713a;
+      --soil: #2a1a0e;
+      --muted: #6b5640;
+      --focus: #1e6bd6;           /* blue focus ring: shows on cream, wood and soil */
+      --font: "Fredoka Variable", "Fredoka", ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Nunito", system-ui, sans-serif;
+      --header-height: 4.5rem;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--soil);
+      color: var(--ink);
+      font-family: var(--font);
+      overflow: hidden;
+    }
+
+    /* The garden drawing surface fills the whole window */
+    #garden {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: block;
+      touch-action: none;          /* taps harvest instead of scrolling or zooming */
+      cursor: pointer;
+    }
+    #garden:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+
+    /* ---------- Top bar: a wooden plank ---------- */
+    header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.75rem;
+      padding: 0.4rem 0.75rem;
+      color: var(--paper);
+      background:
+        repeating-linear-gradient(180deg, transparent 0 22px, rgba(59, 42, 26, 0.35) 22px 25px),
+        linear-gradient(180deg, var(--wood-light), var(--wood));
+      border-bottom: 4px solid var(--ink);
+      box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+      z-index: 2;
+    }
+    header h1 {
+      font-size: 1.25rem;
+      margin: 0;
+      font-weight: 700;
+      color: #c8f59a;
+      text-shadow: 0 2px 0 var(--ink);
+    }
+
+    /* The basket that shows the score and level */
+    .basket { position: relative; width: 112px; height: 62px; flex: none; }
+    .basket svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .basket-text {
+      position: absolute;
+      left: 0; right: 0; top: 27px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      line-height: 1.05;
+      color: #fff6e0;
+      text-shadow: 0 2px 0 var(--ink);
+      font-weight: 700;
+    }
+    .basket-text #scoreText { font-size: 1rem; }
+    .basket-text #levelText { font-size: 0.75rem; font-weight: 600; }
+
+    .status { margin-right: auto; font-size: 0.95rem; line-height: 1.3; font-weight: 600; }
+    .status p { margin: 0; }
+    #goalText { color: #d9ff9e; text-shadow: 0 2px 0 var(--ink); }
+    #bestText { color: #f5e6c8; }
+
+    /* ---------- Chunky cartoon buttons ---------- */
+    button {
+      font: inherit;
+      font-family: var(--font);
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--paper);
+      border: 3px solid var(--ink);
+      border-radius: 999px;
+      padding: 0.45rem 1.1rem;
+      min-height: 44px;            /* comfortable finger size */
+      cursor: pointer;
+      box-shadow: 0 4px 0 var(--ink);
+    }
+    button:hover:not(:disabled) { filter: brightness(1.06); }
+    button:disabled { opacity: 0.55; cursor: default; }
+    button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .header-buttons { display: flex; gap: 0.5rem; }
+    .primary { background: var(--leaf); font-size: 1.2rem; padding: 0.55rem 1.8rem; }
+    .secondary { background: var(--sun); }
+
+    /* ---------- Stats tiles ---------- */
+    #statsScreen { z-index: 6; }        /* sits above the other screens */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+      gap: 0.7rem;
+      margin: 0 0 0.5rem;
+    }
+    .stats div {
+      display: flex;
+      flex-direction: column-reverse;   /* big number on top, label underneath */
+      background: #e4f5d0;
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      box-shadow: 0 3px 0 var(--ink);
+      padding: 0.6rem 0.4rem;
+    }
+    .stats dt { color: var(--muted); font-size: 0.9rem; font-weight: 600; }
+    .stats dd { margin: 0; font-size: 2rem; font-weight: 700; color: var(--leaf-dark); line-height: 1.1; }
+    .note { color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0 0; }
+
+    /* ---------- The moonlit garden scene behind the message screens ---------- */
+    #scenery {
+      position: fixed;
+      inset: 0;
+      z-index: 4;
+      pointer-events: none;
+    }
+    #scenery[hidden] { display: none; }
+    #scenery svg { width: 100%; height: 100%; display: block; }
+    .star { animation: twinkle 2.6s ease-in-out infinite; }
+    .firefly { animation: drift 7s ease-in-out infinite; }
+    .mascot { animation: bob 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+    .wave { animation: wave 1.2s ease-in-out infinite; transform-box: fill-box; transform-origin: left bottom; }
+    @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    @keyframes drift {
+      0%, 100% { transform: translate(0, 0); opacity: 0.9; }
+      25% { transform: translate(18px, -14px); opacity: 0.5; }
+      50% { transform: translate(-10px, -26px); opacity: 1; }
+      75% { transform: translate(-20px, -8px); opacity: 0.6; }
+    }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes wave { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-18deg); } }
+
+    /* ---------- Message screens (title, level cleared, game over, stats) ---------- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: safe center;
+      justify-content: center;
+      padding: 3.5rem 1rem 1.5rem;
+      overflow-y: auto;
+      background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.35));
+      z-index: 5;
+    }
+    .overlay[hidden] { display: none; }
+
+    /* Cards look like seed packets: cream paper, thick outline, cartoon drop shadow */
+    .card {
+      position: relative;
+      max-width: 31rem;
+      width: 100%;
+      text-align: center;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.7), transparent 40%),
+        linear-gradient(180deg, var(--paper), var(--paper-2));
+      border: 4px solid var(--ink);
+      border-radius: 28px;
+      box-shadow: 0 8px 0 var(--ink), 0 18px 30px rgba(0, 0, 0, 0.35);
+      padding: 1.6rem 1.4rem 1.4rem;
+      line-height: 1.45;
+      margin: auto 0;
+    }
+    /* A leafy sprig tucked into the top-left corner of every card */
+    .card::before {
+      content: "";
+      position: absolute;
+      top: -22px; left: -14px;
+      width: 70px; height: 52px;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 70 52'%3E%3Cpath d='M30 50 C30 34 26 22 18 12' fill='none' stroke='%233b2a1a' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M20 16 C4 18 0 4 6 2 C18 0 24 8 20 16Z' fill='%236cc04a' stroke='%233b2a1a' stroke-width='3'/%3E%3Cpath d='M28 30 C40 14 60 18 62 26 C58 38 40 40 28 30Z' fill='%2389d65f' stroke='%233b2a1a' stroke-width='3'/%3E%3C/svg%3E") no-repeat center / contain;
+    }
+    .card h2 {
+      margin: 0.1rem 0 0.4rem;
+      font-size: clamp(1.9rem, 8vw, 2.8rem);
+      font-weight: 700;
+      line-height: 1.05;
+      color: var(--leaf);
+      text-shadow:
+        -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+        0 5px 0 var(--ink);
+      letter-spacing: 0.01em;
+    }
+    .card p { margin: 0.5rem 0; font-size: 1.05rem; }
+    .card .big { font-size: 1.4rem; font-weight: 700; }
+    .card-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.8rem; margin-top: 1rem; }
+
+    /* Row of little vegetable pictures on the cards */
+    .veg-row { display: flex; justify-content: center; gap: 0.35rem; margin: 0.2rem 0 0.4rem; }
+    .veg-row svg { width: 44px; height: 44px; }
+
+    /* Mascot caterpillar peeking over the top edge of the title card */
+    .peek { position: absolute; top: -50px; right: 26px; width: 120px; height: 60px; }
+
+    /* Big picture on the game-over card: a full basket when you win, a chubby caterpillar when you lose */
+    .end-art { width: 150px; height: 110px; margin: -0.2rem auto 0; display: block; }
+    #endScreen .art-lose { display: none; }
+    #endScreen.lost .art-win { display: none; }
+    #endScreen.lost .art-lose { display: block; }
+    #endScreen.lost h2 { color: #ff8a5b; }
+
+    kbd {
+      font-family: var(--font);
+      background: #fff;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      box-shadow: 0 2px 0 var(--ink);
+      padding: 0 0.4rem;
+      font-size: 0.85em;
+      font-weight: 600;
+    }
+
+    /* "Paused" badge */
+    #pausedBadge {
+      position: fixed;
+      left: 50%;
+      bottom: 1.5rem;
+      transform: translateX(-50%);
+      background: var(--paper);
+      color: var(--ink);
+      border: 3px solid var(--ink);
+      box-shadow: 0 4px 0 var(--ink);
+      font-weight: 600;
+      padding: 0.5rem 1.1rem;
+      border-radius: 999px;
+      z-index: 3;
+      pointer-events: none;
+      text-align: center;
+      width: max-content;
+      max-width: calc(100vw - 2rem);
+    }
+    #pausedBadge[hidden] { display: none; }
+
+    /* v3.3 - Sound button: a small cartoon pill that floats in the bottom-left corner on every screen */
+    #soundBtn {
+      position: fixed;
+      left: 0.75rem;
+      bottom: 0.75rem;
+      z-index: 7;                      /* above the garden and every message screen */
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.95rem;
+      padding: 0.3rem 0.9rem 0.3rem 0.6rem;
+      background: var(--paper);
+    }
+    #soundBtn svg { width: 24px; height: 24px; flex: none; }
+    #soundBtn .icon-on { display: none; }
+    #soundBtn.on { background: var(--sun); }
+    #soundBtn.on .icon-on { display: inline; }
+    #soundBtn.on .icon-off { display: none; }
+
+    /* Text only screen readers hear */
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    /* ---------- FEEDBACK ANIMATIONS (v2.2) ---------- */
+    /* Buttons press down onto their shadow */
+    button { transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.15s ease; }
+    button:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+
+    /* Message screens spring in */
+    .overlay:not([hidden]) .card { animation: card-pop 0.4s cubic-bezier(.2, 1.5, .4, 1); }
+    #pausedBadge:not([hidden]) { animation: badge-pop 0.3s cubic-bezier(.2, 1.5, .4, 1); }
+    @keyframes card-pop  { from { transform: scale(0.8) rotate(-2deg); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes badge-pop { from { transform: translateX(-50%) scale(0.7); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+
+    /* Basket bounces and the score flashes on a harvest */
+    .basket.bump { animation: basket-bump 0.45s cubic-bezier(.2, 1.6, .4, 1); }
+    @keyframes basket-bump {
+      0% { transform: scale(1); } 30% { transform: scale(1.18) rotate(-4deg); } 60% { transform: scale(0.96) rotate(2deg); } 100% { transform: none; }
+    }
+    .flash-good { animation: flash-good 0.6s ease-out; }
+    .flash-bad  { animation: flash-bad 0.6s ease-out; }
+    @keyframes flash-good { 0% { color: #fff; text-shadow: 0 0 12px #ffe066; } 100% { } }
+    @keyframes flash-bad  { 0% { color: #ff7a6b; text-shadow: 0 0 10px #ff3b2f; } 100% { } }
+
+    /* The garden shakes when the caterpillars win */
+    #garden.shake { animation: shake 0.5s ease-in-out; }
+    @keyframes shake {
+      0%, 100% { transform: none; } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); }
+      60% { transform: translateX(-5px); } 80% { transform: translateX(3px); }
+    }
+
+    /* REDUCED MOTION: nothing moves, scales, bobs, drifts or shakes. Only slow, gentle fades remain. */
+    @media (prefers-reduced-motion: reduce) {
+      button { transition: filter 0.15s ease; }
+      button:active:not(:disabled) { transform: none; box-shadow: 0 2px 0 var(--ink); }
+      .overlay:not([hidden]) .card { animation: fade-in 0.3s ease-out; }
+      #pausedBadge:not([hidden]) { animation: none; }
+      .basket.bump { animation: basket-glow 0.6s ease-out; }
+      #garden.shake { animation: none; }
+      .star, .firefly, .mascot, .wave { animation: none; }
+      @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes basket-glow { 0% { filter: brightness(1.35); } 100% { filter: none; } }
+    }
+
+    /* Small screens: hide the visible title in the bar (screen readers still hear it) and tighten things */
+    @media (max-width: 640px) {
+      header h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      header { gap: 0.4rem 0.5rem; padding: 0.35rem 0.5rem; }
+      .basket { width: 100px; height: 56px; }
+      .basket-text { top: 24px; }
+      .status { font-size: 0.85rem; }
+      button { padding: 0.4rem 0.8rem; }
+      .card { padding: 1.4rem 1rem 1.2rem; }
+      .veg-row svg { width: 36px; height: 36px; }
+      .peek { right: 12px; width: 100px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Picture pieces used on the cards (drawn once, reused with <use>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="icon-tomato" viewBox="0 0 48 48">
+        <ellipse cx="24" cy="44" rx="14" ry="3" fill="rgba(0,0,0,.2)"/>
+        <circle cx="24" cy="27" r="16" fill="#e8352b" stroke="#3b2a1a" stroke-width="3"/>
+        <ellipse cx="17" cy="21" rx="4" ry="3" fill="#fff" opacity=".6"/>
+        <path d="M24 12 l-7 -3 l4 6 l-6 3 l9 0 l2 5 l2 -5 l9 0 l-6 -3 l4 -6 z" fill="#3f9a35" stroke="#3b2a1a" stroke-width="2.5" stroke-linejoin="round"/>
+      </symbol>
+      <symbol id="icon-carrot" viewBox="0 0 48 48">
+        <path d="M24 14 C18 4 14 4 12 6 C16 8 20 12 22 15 M24 14 C24 4 26 2 28 2 C28 6 27 10 25 14 M24 14 C30 6 34 6 36 8 C32 10 28 12 26 15" fill="#5fbf4a" stroke="#3b2a1a" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M14 16 Q24 11 34 16 L25 45 Q24 47 23 45 Z" fill="#ff8c1a" stroke="#3b2a1a" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M19 24 h5 M24 32 h4 M21 38 h3" stroke="#3b2a1a" stroke-width="2.5" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-eggplant" viewBox="0 0 48 48">
+        <ellipse cx="24" cy="45" rx="12" ry="2.5" fill="rgba(0,0,0,.2)"/>
+        <ellipse cx="22" cy="29" rx="11" ry="16" transform="rotate(25 22 29)" fill="#7a3fa8" stroke="#3b2a1a" stroke-width="3"/>
+        <ellipse cx="18" cy="27" rx="2.5" ry="7" transform="rotate(25 18 27)" fill="#fff" opacity=".35"/>
+        <path d="M24 14 Q31 8 38 12 Q33 18 26 17 Z" fill="#4e9a3a" stroke="#3b2a1a" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M33 11 L36 4" stroke="#3b2a1a" stroke-width="3" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-pumpkin" viewBox="0 0 48 48">
+        <ellipse cx="24" cy="44" rx="17" ry="3" fill="rgba(0,0,0,.2)"/>
+        <ellipse cx="14" cy="29" rx="10" ry="13" fill="#f5a226" stroke="#3b2a1a" stroke-width="3"/>
+        <ellipse cx="34" cy="29" rx="10" ry="13" fill="#f5a226" stroke="#3b2a1a" stroke-width="3"/>
+        <ellipse cx="24" cy="29" rx="9" ry="14" fill="#ffb53d" stroke="#3b2a1a" stroke-width="3"/>
+        <path d="M24 16 Q23 9 27 6" fill="none" stroke="#6b4a1f" stroke-width="5" stroke-linecap="round"/>
+      </symbol>
+      <symbol id="icon-cabbage" viewBox="0 0 48 48">
+        <ellipse cx="24" cy="44" rx="16" ry="3" fill="rgba(0,0,0,.2)"/>
+        <circle cx="24" cy="26" r="17" fill="#4e9a3a" stroke="#3b2a1a" stroke-width="3"/>
+        <circle cx="24" cy="27" r="12" fill="#8fd16a" stroke="#3b2a1a" stroke-width="2.5"/>
+        <path d="M18 20 Q14 27 19 34 M28 19 Q33 27 28 35" fill="none" stroke="#3b2a1a" stroke-width="2.5" stroke-linecap="round"/>
+      </symbol>
+      <!-- A friendly green caterpillar (used peeking over the title card and on the losing screen) -->
+      <symbol id="icon-caterpillar" viewBox="0 0 160 80">
+        <g stroke="#1f4a17" stroke-width="4">
+          <circle cx="22" cy="58" r="14" fill="#6cc04a"/>
+          <circle cx="44" cy="52" r="16" fill="#7fd65a"/>
+          <circle cx="68" cy="50" r="17" fill="#6cc04a"/>
+          <circle cx="92" cy="52" r="17" fill="#7fd65a"/>
+          <circle cx="122" cy="44" r="24" fill="#8ee067"/>
+        </g>
+        <path d="M112 22 Q106 6 98 4 M132 22 Q140 6 150 6" fill="none" stroke="#1f4a17" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="98" cy="4" r="5" fill="#ffd166" stroke="#1f4a17" stroke-width="3"/>
+        <circle cx="150" cy="6" r="5" fill="#ffd166" stroke="#1f4a17" stroke-width="3"/>
+        <circle cx="114" cy="40" r="7" fill="#fff" stroke="#1f4a17" stroke-width="3"/>
+        <circle cx="132" cy="40" r="7" fill="#fff" stroke="#1f4a17" stroke-width="3"/>
+        <circle cx="116" cy="41" r="3.5" fill="#1f2a14"/><circle cx="134" cy="41" r="3.5" fill="#1f2a14"/>
+        <circle cx="117" cy="39.5" r="1.3" fill="#fff"/><circle cx="135" cy="39.5" r="1.3" fill="#fff"/>
+        <ellipse cx="108" cy="52" rx="5" ry="3" fill="#ff9a9a" opacity=".8"/>
+        <ellipse cx="139" cy="52" rx="5" ry="3" fill="#ff9a9a" opacity=".8"/>
+        <path d="M116 53 Q123 60 130 53" fill="none" stroke="#1f4a17" stroke-width="3.5" stroke-linecap="round"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <header>
+    <h1 id="barTitle">Caterpillar Harvest</h1>
+
+    <!-- The basket: shows the total score and the current level -->
+    <div class="basket" role="group" aria-label="Basket: score and level">
+      <svg viewBox="0 0 112 62" aria-hidden="true" focusable="false">
+        <path d="M18 28 Q56 -10 94 28" fill="none" stroke="#3b2a1a" stroke-width="9" stroke-linecap="round"/>
+        <path d="M18 28 Q56 -10 94 28" fill="none" stroke="#c98a45" stroke-width="4" stroke-linecap="round"/>
+        <!-- vegetables peeking out of the basket -->
+        <circle cx="38" cy="22" r="9" fill="#e8352b" stroke="#3b2a1a" stroke-width="2.5"/>
+        <path d="M58 10 Q64 4 70 10 L64 26 Z" fill="#ff8c1a" stroke="#3b2a1a" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="80" cy="21" r="9" fill="#8fd16a" stroke="#3b2a1a" stroke-width="2.5"/>
+        <path d="M4 24 H108 L97 59 Q96 61 93 61 H19 Q16 61 15 59 Z" fill="#b8742f" stroke="#3b2a1a" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M9 37 H103 M12 49 H100" stroke="#8a5320" stroke-width="2.5"/>
+        <rect x="2" y="20" width="108" height="9" rx="4.5" fill="#d38c45" stroke="#3b2a1a" stroke-width="3"/>
+      </svg>
+      <div class="basket-text">
+        <span id="scoreText">Score 0</span>
+        <span id="levelText">Level 1 of 5</span>
+      </div>
+    </div>
+
+    <div class="status">
+      <p id="goalText">Harvest the ripe vegetables!</p>
+      <p id="bestText">Best 0</p>
+    </div>
+
+    <div class="header-buttons">
+      <button id="pauseBtn" type="button" aria-pressed="false" aria-keyshortcuts="P" disabled>Pause</button>
+      <button id="statsBtn" type="button" class="stats-open secondary">Stats</button>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="garden" tabindex="0"
+            aria-label="Vegetable garden. Tap or click a ripe vegetable to harvest it. With the keyboard, arrow keys choose a vegetable and Enter or Space harvests it."
+            aria-describedby="keyHelp">
+      Your browser does not support the canvas element, which this game needs.
+    </canvas>
+    <p id="keyHelp" class="sr-only">
+      Arrow keys move between vegetables. Enter or Space harvests the chosen vegetable if it is ripe.
+      P pauses.
+    </p>
+  </main>
+
+  <div id="pausedBadge" hidden>Paused — press <kbd>P</kbd> or the Pause button to continue</div>
+
+  <!-- v3.3 - Sound on/off. Starts off; the choice is remembered. Always visible in the bottom-left corner. -->
+  <button id="soundBtn" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 9 H8 L13 5 V19 L8 15 H4 Z" fill="#fff6df" stroke="#3b2a1a" stroke-width="2" stroke-linejoin="round"/>
+      <g class="icon-on" fill="none" stroke="#3b2a1a" stroke-width="2" stroke-linecap="round">
+        <path d="M16 9.5 Q18 12 16 14.5"/><path d="M18.5 7 Q22 12 18.5 17"/>
+      </g>
+      <g class="icon-off" fill="none" stroke="#3b2a1a" stroke-width="2.2" stroke-linecap="round">
+        <path d="M16.5 9.5 L21.5 14.5 M21.5 9.5 L16.5 14.5"/>
+      </g>
+    </svg>
+    <span id="soundLabel">Sound: Off</span>
+  </button>
+
+  <!-- v3.0 - Moonlit garden scene shown behind the title, level, end and stats screens (decoration only) -->
+  <div id="scenery" aria-hidden="true">
+    <svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMax slice" focusable="false">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#0c1736"/>
+          <stop offset="0.6" stop-color="#22336a"/>
+          <stop offset="1" stop-color="#3d5288"/>
+        </linearGradient>
+        <radialGradient id="moonGlow">
+          <stop offset="0" stop-color="#fff4c8" stop-opacity=".55"/>
+          <stop offset="1" stop-color="#fff4c8" stop-opacity="0"/>
+        </radialGradient>
+        <radialGradient id="flyGlow">
+          <stop offset="0" stop-color="#f4ff9a"/>
+          <stop offset=".35" stop-color="#d9ff6a" stop-opacity=".8"/>
+          <stop offset="1" stop-color="#b8ff4a" stop-opacity="0"/>
+        </radialGradient>
+        <pattern id="pickets" width="56" height="110" patternUnits="userSpaceOnUse">
+          <path d="M14 110 V26 Q28 6 42 26 V110 Z" fill="#efe0bb" stroke="#3b2a1a" stroke-width="5" stroke-linejoin="round"/>
+        </pattern>
+        <pattern id="grass" width="90" height="70" patternUnits="userSpaceOnUse" patternTransform="translate(0 930)">
+          <path d="M0 70 Q8 30 14 10 Q16 40 22 70 M28 70 Q34 36 46 18 Q42 46 46 70 M54 70 Q58 40 70 26 Q66 50 72 70 M74 70 Q80 44 88 34 Q86 54 90 70" fill="#4f9e3e" stroke="#1f4a17" stroke-width="4" stroke-linejoin="round"/>
+        </pattern>
+      </defs>
+
+      <rect width="1600" height="1000" fill="url(#sky)"/>
+
+      <!-- stars -->
+      <g fill="#fff6c8">
+        <circle class="star" cx="120" cy="90" r="4"/>
+        <circle class="star" cx="300" cy="180" r="3" style="animation-delay:-.6s"/>
+        <circle class="star" cx="470" cy="70" r="5" style="animation-delay:-1.2s"/>
+        <circle class="star" cx="640" cy="200" r="3" style="animation-delay:-1.8s"/>
+        <circle class="star" cx="820" cy="110" r="4" style="animation-delay:-.3s"/>
+        <circle class="star" cx="980" cy="230" r="3" style="animation-delay:-2.1s"/>
+        <circle class="star" cx="1060" cy="60" r="4" style="animation-delay:-.9s"/>
+        <circle class="star" cx="1500" cy="260" r="3" style="animation-delay:-1.5s"/>
+        <circle class="star" cx="210" cy="320" r="3" style="animation-delay:-2.4s"/>
+        <circle class="star" cx="1450" cy="90" r="5" style="animation-delay:-.4s"/>
+      </g>
+
+      <!-- moon -->
+      <circle cx="1290" cy="180" r="170" fill="url(#moonGlow)"/>
+      <circle cx="1290" cy="180" r="74" fill="#fff1bd" stroke="#3b2a1a" stroke-width="6"/>
+      <circle cx="1262" cy="160" r="13" fill="#f0dd98"/>
+      <circle cx="1312" cy="208" r="17" fill="#f0dd98"/>
+      <circle cx="1318" cy="150" r="8" fill="#f0dd98"/>
+
+      <!-- far hill -->
+      <path d="M0 610 Q300 500 650 590 T1300 560 T1600 540 V1000 H0 Z" fill="#1d4a2a" stroke="#0e2715" stroke-width="6"/>
+
+      <!-- picket fence -->
+      <rect x="-20" y="610" width="1640" height="110" fill="url(#pickets)"/>
+      <rect x="-20" y="640" width="1640" height="14" rx="7" fill="#e2d09f" stroke="#3b2a1a" stroke-width="5"/>
+      <rect x="-20" y="682" width="1640" height="14" rx="7" fill="#e2d09f" stroke="#3b2a1a" stroke-width="5"/>
+
+      <!-- middle hill with a sunflower or two -->
+      <path d="M0 720 Q400 640 820 700 T1600 670 V1000 H0 Z" fill="#2f6e36" stroke="#173d1c" stroke-width="6"/>
+      <g stroke="#3b2a1a" stroke-width="5">
+        <path d="M1450 700 Q1440 620 1452 560" fill="none" stroke="#2f6b23" stroke-width="9"/>
+        <circle cx="1452" cy="550" r="38" fill="#ffc93c"/>
+        <circle cx="1452" cy="550" r="17" fill="#7a4a1c"/>
+        <path d="M120 735 Q114 670 126 620" fill="none" stroke="#2f6b23" stroke-width="8"/>
+        <circle cx="126" cy="612" r="30" fill="#ffc93c"/>
+        <circle cx="126" cy="612" r="13" fill="#7a4a1c"/>
+      </g>
+
+      <!-- front hill with vegetable rows -->
+      <path d="M0 830 Q480 745 980 805 T1600 790 V1000 H0 Z" fill="#3f8a3f" stroke="#1f4a17" stroke-width="7"/>
+      <g>
+        <use href="#icon-tomato" x="330" y="770" width="70" height="70"/>
+        <use href="#icon-cabbage" x="430" y="760" width="80" height="80"/>
+        <use href="#icon-carrot" x="540" y="762" width="66" height="66"/>
+        <use href="#icon-pumpkin" x="1040" y="776" width="90" height="90"/>
+        <use href="#icon-eggplant" x="1150" y="772" width="70" height="70"/>
+        <use href="#icon-tomato" x="1240" y="780" width="64" height="64"/>
+      </g>
+
+      <!-- the mascot caterpillar, bobbing and waving an antenna -->
+      <g class="mascot">
+        <use href="#icon-caterpillar" x="660" y="736" width="240" height="120"/>
+      </g>
+
+      <!-- grass along the bottom -->
+      <rect x="0" y="930" width="1600" height="70" fill="url(#grass)"/>
+
+      <!-- fireflies -->
+      <g>
+        <circle class="firefly" cx="260" cy="520" r="16" fill="url(#flyGlow)"/>
+        <circle class="firefly" cx="520" cy="430" r="14" fill="url(#flyGlow)" style="animation-delay:-2s"/>
+        <circle class="firefly" cx="900" cy="500" r="18" fill="url(#flyGlow)" style="animation-delay:-4s"/>
+        <circle class="firefly" cx="1120" cy="420" r="13" fill="url(#flyGlow)" style="animation-delay:-1s"/>
+        <circle class="firefly" cx="1380" cy="480" r="16" fill="url(#flyGlow)" style="animation-delay:-5s"/>
+        <circle class="firefly" cx="700" cy="610" r="12" fill="url(#flyGlow)" style="animation-delay:-3s"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Title screen -->
+  <section id="titleScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="titleHeading">
+    <div class="card">
+      <svg class="peek" viewBox="0 0 160 80" aria-hidden="true" focusable="false"><use href="#icon-caterpillar"/></svg>
+      <h2 id="titleHeading">Caterpillar Harvest</h2>
+      <div class="veg-row" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><use href="#icon-tomato"/></svg>
+        <svg viewBox="0 0 48 48"><use href="#icon-carrot"/></svg>
+        <svg viewBox="0 0 48 48"><use href="#icon-cabbage"/></svg>
+        <svg viewBox="0 0 48 48"><use href="#icon-eggplant"/></svg>
+        <svg viewBox="0 0 48 48"><use href="#icon-pumpkin"/></svg>
+      </div>
+      <p id="howToPlay">Harvest the ripe vegetables before the caterpillars eat them!</p>
+      <p id="titleBest" class="note"></p>
+      <div class="card-buttons">
+        <button id="playBtn" type="button" class="primary">Play</button>
+        <button id="continueBtn" type="button" class="secondary" hidden>Continue</button>
+        <button type="button" class="stats-open">Stats</button>
+      </div>
+      <p class="note">Keys: <kbd>Arrows</kbd> choose · <kbd>Enter</kbd> harvest · <kbd>P</kbd> pause</p>
+      <p class="note storage-note" hidden></p>
+    </div>
+  </section>
+
+  <!-- Level cleared screen -->
+  <section id="levelScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="levelHeading" hidden>
+    <div class="card">
+      <h2 id="levelHeading">Level cleared!</h2>
+      <div class="veg-row" aria-hidden="true">
+        <svg viewBox="0 0 48 48"><use href="#icon-carrot"/></svg>
+        <svg viewBox="0 0 48 48"><use href="#icon-tomato"/></svg>
+        <svg viewBox="0 0 48 48"><use href="#icon-pumpkin"/></svg>
+      </div>
+      <p id="levelMessage"></p>
+      <p id="levelScore" class="big"></p>
+      <div class="card-buttons">
+        <button id="nextBtn" type="button" class="primary">Next level</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Game over / win screen. JavaScript adds class "lost" when the caterpillars win. -->
+  <section id="endScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="endHeading" hidden>
+    <div class="card">
+      <!-- Winning picture: a basket piled with vegetables -->
+      <svg class="end-art art-win" viewBox="0 0 150 110" aria-hidden="true" focusable="false">
+        <path d="M30 52 Q75 -6 120 52" fill="none" stroke="#3b2a1a" stroke-width="10" stroke-linecap="round"/>
+        <path d="M30 52 Q75 -6 120 52" fill="none" stroke="#c98a45" stroke-width="5" stroke-linecap="round"/>
+        <use href="#icon-pumpkin" x="24" y="22" width="44" height="44"/>
+        <use href="#icon-cabbage" x="56" y="16" width="42" height="42"/>
+        <use href="#icon-tomato" x="86" y="24" width="38" height="38"/>
+        <use href="#icon-carrot" x="70" y="4" width="34" height="34"/>
+        <path d="M12 54 H138 L124 104 Q123 107 119 107 H31 Q27 107 26 104 Z" fill="#b8742f" stroke="#3b2a1a" stroke-width="4" stroke-linejoin="round"/>
+        <path d="M17 72 H133 M21 88 H129" stroke="#8a5320" stroke-width="3"/>
+        <rect x="8" y="48" width="134" height="12" rx="6" fill="#d38c45" stroke="#3b2a1a" stroke-width="4"/>
+      </svg>
+      <!-- Losing picture: a very full caterpillar -->
+      <svg class="end-art art-lose" viewBox="0 0 160 90" aria-hidden="true" focusable="false">
+        <use href="#icon-caterpillar" x="0" y="6" width="160" height="80"/>
+        <path d="M8 86 Q80 74 152 86" fill="none" stroke="#3b2a1a" stroke-width="4" stroke-linecap="round"/>
+      </svg>
+      <h2 id="endHeading">Game over</h2>
+      <p id="endMessage"></p>
+      <p id="endScore" class="big"></p>
+      <p id="endBest"></p>
+      <div class="card-buttons">
+        <button id="againBtn" type="button" class="primary">Play again</button>
+        <button type="button" class="stats-open secondary">Stats</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats screen (v2.7): numbers saved in this browser -->
+  <section id="statsScreen" class="overlay" role="dialog" aria-modal="true" aria-labelledby="statsHeading" hidden>
+    <div class="card">
+      <h2 id="statsHeading">Stats</h2>
+      <dl class="stats">
+        <div><dt>Games played</dt><dd id="statPlayed">0</dd></div>
+        <div><dt>Games won</dt><dd id="statWon">0</dd></div>
+        <div><dt>Best score</dt><dd id="statBest">0</dd></div>
+        <div><dt>Current streak</dt><dd id="statStreak">0</dd></div>
+        <div><dt>Longest streak</dt><dd id="statBestStreak">0</dd></div>
+      </dl>
+      <p class="note">A streak is how many games in a row you've won (cleared all levels).</p>
+      <div class="card-buttons">
+        <button id="statsCloseBtn" type="button" class="primary">Back</button>
+        <button id="statsResetBtn" type="button" class="secondary">Reset stats</button>
+      </div>
+      <p class="note storage-note" hidden></p>
+    </div>
+  </section>
+
+  <!-- Announcements for screen readers -->
+  <div id="announcer" class="sr-only" role="status" aria-live="polite"></div>
+
+<script>
+// v2.0 - Caterpillar Harvest
+
+/* =========================================================================
+   GAME SETTINGS — the numbers and words that change how the game feels.
+   Change anything in this list; you don't need to touch the rest of the code.
+   ========================================================================= */
+const GAME = {
+  // --- CATERPILLAR SPEED (v2.1) — the easiest way to make the game harder or easier ---
+  // Speeds are in pixels per second on a medium-size screen (scaled for phones and big screens).
+  startSpeed: 46,            // How fast the caterpillars crawl. Bigger = harder. (v3.1: raised from 34.)
+  speedUpPerLevel: 0,        // How much faster they get on each new level. 0 = the same speed on every level (v2.8).
+
+  // --- Words shown in the game ---
+  words: {
+    title: 'Caterpillar Harvest',
+    howToPlay: 'Tap ripe vegetables to harvest them before the hungry caterpillars eat them all!',
+    goalLeft: 'Harvest {n} more to pass',          // {n} is replaced with a number
+    goalMet: 'Goal reached — clear the garden!',
+    notRipe: 'Not ripe',
+    levelCleared: 'Level {level} cleared!',
+    levelMessage: 'You harvested {harvested} of {total} vegetables.',
+    nextLevel: 'Next level',
+    winTitle: 'You saved the garden!',
+    winMessage: 'You cleared all {levels} levels.',
+    loseTitle: 'The caterpillars won!',
+    loseMessage: 'They ate too many vegetables on level {level}.',
+    newBest: 'New high score!',
+    continueLabel: 'Continue level {level}'
+  },
+
+  // --- The rules ---
+  harvestGoal: 0.5,          // Share of each level's vegetables you must harvest (0.5 = half). Lose if the caterpillars make that impossible.
+  pointsPerVegetable: 1,     // Points for each vegetable harvested.
+
+  // --- The levels: one line per level. Add or remove lines to change the number of levels. ---
+  //   caterpillars: how many    size: body width (radius in px)    length: body segments
+  //   vegetables: how many grow in the garden
+  //   (Speed is set by startSpeed and speedUpPerLevel at the top of this list.)
+  levels: [
+    { caterpillars: 2, size: 15, length: 18, vegetables: 16 },
+    { caterpillars: 3, size: 16, length: 19, vegetables: 18 },
+    { caterpillars: 4, size: 17, length: 20, vegetables: 20 },
+    { caterpillars: 5, size: 18, length: 21, vegetables: 22 },
+    { caterpillars: 6, size: 19, length: 22, vegetables: 24 }
+  ],
+
+  // --- Vegetables ---
+  // Ripening (v2.6): each kind has its own time, set by "ripen" in the list below.
+  ripenTimeScale: 1,         // Multiplies every ripening time. 0.5 = twice as fast, 2 = twice as slow, 0 = ripe straight away.
+  vegetableSize: 21,       // Size of a ripe vegetable (radius in px).
+  vegetableTypes: [          // name is read aloud; shape picks the drawing; colors are body and leaves
+                             // ripen: [fastest, slowest] seconds to ripen — each one gets a random time in between
+    { name: 'tomato',   shape: 'tomato',   color: '#e8352b', leaf: '#3f9a35', ripen: [2, 6] },
+    { name: 'carrot',   shape: 'carrot',   color: '#ff8c1a', leaf: '#5fbf4a', ripen: [4, 9] },
+    { name: 'eggplant', shape: 'eggplant', color: '#7a3fa8', leaf: '#4e9a3a', ripen: [5, 11] },
+    { name: 'pumpkin',  shape: 'pumpkin',  color: '#f5a226', leaf: '#6b4a1f', ripen: [7, 14] },
+    { name: 'cabbage',  shape: 'cabbage',  color: '#8fd16a', leaf: '#4e9a3a', ripen: [9, 16] }
+  ],
+
+  // --- Special vegetables (v2.3 rare, v2.4 extremely rare) ---
+  // One entry per rarity. The game checks the most valuable one first.
+  //   label: what it's called    fromLevel: first level it can grow on
+  //   chance: chance any one vegetable is this kind (0.12 = about 1 in 8)    points: what it's worth
+  //   glow: glow color as "red, green, blue"    stars: how many twinkling stars circle it
+  //   message: shown when they first appear ({points} is replaced with the number)
+  //   ripenSlower: ripening time compared with the normal vegetable of the same shape (1.6 = 60% longer)
+  //   vegetables: same shapes as above, in special colors
+  specialVegetables: [
+    {
+      label: 'rare', fromLevel: 2, chance: 0.12, points: 3, glow: '255, 205, 40', stars: 3, ripenSlower: 1.6,
+      message: 'Look for golden vegetables: {points} points each!',
+      vegetables: [
+        { name: 'golden carrot',  shape: 'carrot',  color: '#ffd84a', leaf: '#7be06a' },
+        { name: 'golden tomato',  shape: 'tomato',  color: '#ffcc33', leaf: '#5fbf4a' },
+        { name: 'golden pumpkin', shape: 'pumpkin', color: '#ffe27a', leaf: '#8a6a2a' }
+      ]
+    },
+    {
+      label: 'extremely rare', fromLevel: 4, chance: 0.04, points: 5, glow: '200, 130, 255', stars: 5, ripenSlower: 2.2,
+      message: 'Crystal vegetables are here: {points} points each!',
+      vegetables: [
+        { name: 'crystal carrot',  shape: 'carrot',  color: '#bff3ff', leaf: '#e9b8ff' },
+        { name: 'crystal cabbage', shape: 'cabbage', color: '#d9f8ff', leaf: '#b98cff' },
+        { name: 'crystal tomato',  shape: 'tomato',  color: '#c9e8ff', leaf: '#e9b8ff' }
+      ]
+    }
+  ],
+
+  // --- How the caterpillars move ---
+  // v2.6 - Each caterpillar heads for the vegetable that will be ripe soonest (ripe ones first),
+  // and they each pick a different one when they can.
+  hunger: 0.9,               // How strongly they steer toward their chosen vegetable (0 = not at all, 1 = straight at it).
+  nearbyPreference: 0.3,     // 0 = always go for the ripest one anywhere; bigger = more willing to pick a closer one instead.
+  wander: 1.2,               // How twisty their paths are.
+  inchPulse: 0.35,           // "Scrunch and stretch" crawl. 0 = smooth glide.
+  crawlRhythm: 3,            // Scrunch/stretch cycles per second.
+  speedVariety: 0.15,        // Each caterpillar is up to 15% faster or slower than the level speed.
+  segmentGap: 1.1,           // Space between body segments (times the width).
+  tailTaper: 0.45,           // How much thinner the tail is than the head.
+  bodyWiggle: 3,             // Side-to-side sway in px.
+  bounceChance: 0.5,         // When two meet: chance they bounce (otherwise one crawls under).
+  underDim: 0.5,             // How faded a caterpillar looks while underneath another.
+
+  // --- Feedback effects (v2.2) ---
+  burstSize: 14,             // How many sparkles fly out when you harvest. 0 = none.
+  screenDelaySeconds: 1,     // Pause before the "level cleared" / "game over" screen, so the last effects can play.
+  petalCount: 60,            // v3.3 - Flower petals that drift down when a level is cleared or the game is won.
+  petalColors: ['#ffb3c7', '#ff8fb1', '#fff4f8', '#d9b8ff', '#ffe27a'],   // pink, rose, white, lavender, buttercup
+
+  // --- Sound effects (v3.3) — made by the browser, no sound files. Notes are in hertz (A4 = 440). ---
+  sounds: {
+    volume: 0.5,                                 // Overall loudness, 0 (silent) to 1 (loud).
+    ripenNotes: [700, 1500],                     // A water-drop "plip": slides from the first to the second.
+    harvestNotes: [784, 1047],                   // A wooden "plonk-plink" (G5, C6). Rare ones add extra notes.
+    levelNotes: [659, 784, 1047],                // Level cleared: a little rising tune (E5, G5, C6) and a bird.
+    winNotes: [523, 659, 784, 1047, 880, 1047],  // Winning: a skipping garden tune, then birds sing.
+    munchNotes: [150, 120],                      // A caterpillar eating: a low "nom nom" with a crunch.
+    loseNotes: [392, 370, 349, 294]              // Losing: a droopy "wah, wah, wah, wahhh".
+  },
+
+  // --- Caterpillar color (v2.7: always green) ---
+  // Each caterpillar gets its own green, picked between these two hues (90 = yellow-green, 140 = blue-green).
+  greenHues: [90, 140],
+  stripeContrast: 8,         // How much lighter every other segment is, for soft stripes. 0 = plain.
+
+  // --- Glow ---
+  glowSize: 2.3,
+  glowStrength: 0.25,
+  glowPulse: 0.25
+};
+
+/* =========================================================================
+   PAGE ELEMENTS
+   ========================================================================= */
+const canvas       = document.getElementById('garden');
+// v3.0 - Same rounded cartoon font as the page, for text drawn on the garden ("+1", banners).
+const CANVAS_FONT  = '"Fredoka Variable", "Fredoka", ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif';
+const scenery      = document.getElementById('scenery');
+const ctx          = canvas.getContext('2d');
+const header       = document.querySelector('header');
+const pauseBtn     = document.getElementById('pauseBtn');
+const statsScreen  = document.getElementById('statsScreen');    // v2.7
+const statsResetBtn= document.getElementById('statsResetBtn');
+const pausedBadge  = document.getElementById('pausedBadge');
+const announcer    = document.getElementById('announcer');
+const titleScreen  = document.getElementById('titleScreen');
+const levelScreen  = document.getElementById('levelScreen');
+const endScreen    = document.getElementById('endScreen');
+const playBtn      = document.getElementById('playBtn');
+const continueBtn  = document.getElementById('continueBtn');
+const nextBtn      = document.getElementById('nextBtn');
+const againBtn     = document.getElementById('againBtn');
+
+/* =========================================================================
+   GAME STATE — everything that changes while playing.
+   ========================================================================= */
+let screen = 'title';        // which part of the game we are in: 'title', 'playing', 'levelDone', 'over'
+let paused = false;
+let levelIndex = 0;          // 0 = level 1
+let score = 0;               // total score for the whole game
+let bestAtGameStart = 0;     // high score before this game began (to spot a new record)
+let highScore = 0;
+let levelTotal = 0;          // vegetables planted this level
+let levelHarvested = 0;      // harvested by the player this level
+let levelEaten = 0;          // eaten by caterpillars this level
+let levelTime = 0;           // seconds of play on this level (used for ripening)
+let elapsed = 0;             // total seconds of animation (used for glow and colors)
+
+let vegetables = [];         // vegetables still in the garden
+let caterpillars = [];
+let floaters = [];           // the "+1" and "Not ripe" texts that float up and fade
+// v2.2 - visual feedback effects
+let particles = [];          // sparkles, crumbs, stars and flower petals that fly out and fade
+let rings = [];              // circles that grow and fade (ripples, flashes)
+let ghosts = [];             // a harvested vegetable popping, or an eaten one shrinking away
+let banner = null;           // big text in the middle of the garden ("Level 2", "Cleared!")
+let selectPopAge = 99;       // seconds since the keyboard selection moved (the ring pops)
+let endTimer = null;         // waits a moment before showing the level-cleared / game-over screen
+let meetings = new Map();    // remembers whether touching caterpillars chose "bounce" or "under"
+let nextId = 1;
+
+let selectedVeg = null;      // vegetable chosen with the keyboard
+let keyboardMode = false;    // true after arrow keys are used (shows the selection ring)
+
+let frameRequest = null;
+let lastTime = null;
+
+// Garden size, measured in CSS pixels. The garden starts just below the top bar.
+let width = 0, height = 0, gardenTop = 0, gardenHeight = 0, scale = 1;
+let gardenRows = 5;          // v3.0 - how many raised beds to draw (matches the vegetable rows)
+let soilCanvas = null;       // v3.0 - the soil picture, drawn once and reused every frame
+
+/* =========================================================================
+   REDUCED MOTION — if the computer asks for less motion, the caterpillars
+   glide smoothly (no wiggle or scrunching), nothing pulses or flashes,
+   and the "+1" fades in place instead of floating up.
+   ========================================================================= */
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+let calm = motionQuery.matches;
+motionQuery.addEventListener('change', (e) => { calm = e.matches; particles = []; });
+
+/* =========================================================================
+   FEEDBACK EFFECTS (v2.2) — helpers that create bursts, rings and pops.
+   In reduced-motion mode, bursts are skipped and rings don't grow: they just
+   fade gently where they are, so there is still a response but no movement.
+   ========================================================================= */
+
+// Sparkles (or crumbs or stars) shooting out from a point.
+function burst(x, y, colors, count, speed, options = {}) {
+  if (calm || count <= 0) return;
+  for (let i = 0; i < count; i++) {
+    const angle = random(0, Math.PI * 2);
+    const s = random(speed * 0.4, speed) * scale;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * s,
+      vy: Math.sin(angle) * s - (options.lift || 0) * scale,
+      size: random(2, 4.5) * scale * (options.sizeBoost || 1),
+      color: colors[i % colors.length],
+      shape: options.shape || 'dot',       // 'dot' or 'star' (petals are made in fallingPetals)
+      spin: random(-8, 8),
+      gravity: (options.gravity || 0) * scale,
+      age: 0,
+      life: options.life || random(0.45, 0.75)
+    });
+  }
+}
+
+// A ring that grows from r0 to r1 and fades. In calm mode it stays still and only fades.
+function ring(x, y, r0, r1, color, life = 0.45, lineWidth = 3) {
+  rings.push({ x, y, r0, r1: calm ? r0 : r1, color, life, lineWidth, age: 0 });
+}
+
+// Restarts a CSS animation class on an element (the basket bounce, text flashes, the shake).
+function pulseClass(el, className) {
+  el.classList.remove('flash-good', 'flash-bad', className);
+  void el.offsetWidth;            // makes the browser notice the class was removed, so it can replay
+  el.classList.add(className);
+}
+
+// Big text in the middle of the garden that pops in and fades out.
+function showBanner(text, color = '#ffe066') {
+  banner = { text, color, age: 0, life: 1.4 };
+}
+
+// v3.3 - Flower petals that flutter and drift down across the garden (instead of confetti).
+// Each petal falls slowly, sways side to side like it's floating on a breeze, and turns.
+// Skipped in reduced-motion mode.
+function fallingPetals() {
+  if (calm) return;
+  const colors = GAME.petalColors;
+  for (let i = 0; i < GAME.petalCount; i++) {
+    particles.push({
+      // Scattered over the whole garden (fading in), so the screen fills with petals right away.
+      x: random(-20, width + 20), y: random(gardenTop - 40, gardenTop + gardenHeight * 0.85),
+      vx: random(-15, 15) * scale, vy: random(35, 70) * scale,
+      size: random(9, 15) * scale, color: colors[i % colors.length],
+      shape: 'petal', spin: random(-2.5, 2.5), gravity: 12 * scale,
+      maxFall: random(70, 110) * scale,                   // petals float, so they never fall fast
+      sway: random(25, 55) * scale, swaySpeed: random(1.5, 3), swayPhase: random(0, Math.PI * 2),
+      flutter: random(3, 6),                              // how quickly it flips as it falls
+      age: 0, life: random(2.6, 3.6)
+    });
+  }
+}
+
+/* =========================================================================
+   SOUND EFFECTS (v3.3) — made on the spot with the browser's Web Audio
+   feature: little waves of sound shaped into notes, plips, chirps and crunches.
+   Sound starts OFF. Browsers only allow sound after you click or press a key,
+   so nothing plays until then.
+   ========================================================================= */
+let soundOn = false;         // turned on with the Sound button; the choice is saved
+let audioCtx = null;         // the browser's sound maker, created the first time it's needed
+let masterVolume = null;     // one volume knob that every sound goes through
+let noiseBuffer = null;      // a short burst of static, used for the "crunch" in munching
+let lastRipenSound = 0;      // stops lots of ripening plips piling up at once
+
+// Gets the sound maker ready (or wakes it up). Returns null if this browser can't make sound.
+function getAudio() {
+  if (!audioCtx) {
+    const AudioMaker = window.AudioContext || window.webkitAudioContext;
+    if (!AudioMaker) return null;
+    try { audioCtx = new AudioMaker(); } catch (err) { return null; }
+    masterVolume = audioCtx.createGain();
+    masterVolume.gain.value = GAME.sounds.volume;
+    masterVolume.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  return audioCtx;
+}
+
+// Plays one note. "start" is how many seconds from now; the note fades in fast and out smoothly.
+//   type: the wave shape ('sine' = pure and soft, 'triangle' = warm and wooden, 'sawtooth' = buzzy)
+//   slideTo: if given, the pitch slides to this note by the end
+//   muffle: if given, softens the sound by cutting out the high parts above this pitch
+function playNote(freq, start, length, { type = 'triangle', volume = 0.4, slideTo = null, muffle = null } = {}) {
+  const t = audioCtx.currentTime + start;
+  const wave = audioCtx.createOscillator();
+  wave.type = type;
+  wave.frequency.setValueAtTime(freq, t);
+  if (slideTo) wave.frequency.exponentialRampToValueAtTime(slideTo, t + length);
+  const fade = audioCtx.createGain();
+  fade.gain.setValueAtTime(0.0001, t);
+  fade.gain.exponentialRampToValueAtTime(volume, t + 0.012);
+  fade.gain.exponentialRampToValueAtTime(0.0001, t + length);
+  let last = wave;
+  if (muffle) {
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = muffle;
+    wave.connect(filter);
+    last = filter;
+  }
+  last.connect(fade);
+  fade.connect(masterVolume);
+  wave.start(t);
+  wave.stop(t + length + 0.05);
+}
+
+// A little bird chirp: two quick high whistles that swoop upward.
+function chirp(start) {
+  playNote(2300, start, 0.07, { type: 'sine', volume: 0.12, slideTo: 3400 });
+  playNote(2700, start + 0.09, 0.06, { type: 'sine', volume: 0.1, slideTo: 3900 });
+}
+
+// A short, soft crunch (muffled static), like a bite of a crisp leaf.
+function crunch(start) {
+  if (!noiseBuffer) {
+    noiseBuffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.1), audioCtx.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  }
+  const t = audioCtx.currentTime + start;
+  const source = audioCtx.createBufferSource();
+  source.buffer = noiseBuffer;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 900;
+  const fade = audioCtx.createGain();
+  fade.gain.setValueAtTime(0.22, t);
+  fade.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+  source.connect(filter);
+  filter.connect(fade);
+  fade.connect(masterVolume);
+  source.start(t);
+  source.stop(t + 0.1);
+}
+
+// Plays one of the game's sounds by name. Does nothing while sound is off.
+function playSound(name, points = 1) {
+  if (!soundOn) return;
+  if (!getAudio()) return;
+  const S = GAME.sounds;
+
+  if (name === 'ripen') {
+    // Good: a soft water-drop "plip". Several vegetables can ripen together, so space them out.
+    if (audioCtx.currentTime - lastRipenSound < 0.12) return;
+    lastRipenSound = audioCtx.currentTime;
+    playNote(S.ripenNotes[0], 0, 0.09, { type: 'sine', volume: 0.16, slideTo: S.ripenNotes[1] });
+  }
+  else if (name === 'harvest') {
+    // Good: a wooden "plonk-plink". Rare ones (3 points) add a note and a bird; 5 points adds two more notes.
+    const notes = [...S.harvestNotes];
+    if (points >= 3) notes.push(1319);
+    if (points >= 5) notes.push(1568, 2093);
+    notes.forEach((f, i) => playNote(f, i * 0.07, 0.2, { type: 'triangle', volume: 0.35 }));
+    if (points >= 3) chirp(notes.length * 0.07 + 0.05);
+  }
+  else if (name === 'level') {
+    // Good: a little rising tune and a bird.
+    S.levelNotes.forEach((f, i) => playNote(f, i * 0.11, 0.28, { type: 'triangle', volume: 0.32 }));
+    chirp(S.levelNotes.length * 0.11 + 0.1);
+  }
+  else if (name === 'win') {
+    // Good: a skipping garden tune, then two birds sing.
+    const gap = 0.13;
+    S.winNotes.forEach((f, i) => {
+      const lastNote = i === S.winNotes.length - 1;
+      playNote(f, i * gap, lastNote ? 0.7 : 0.22, { type: 'triangle', volume: 0.34 });
+    });
+    chirp(S.winNotes.length * gap + 0.15);
+    chirp(S.winNotes.length * gap + 0.45);
+  }
+  else if (name === 'munch') {
+    // Bad: a low "nom nom" that sags in pitch, each bite with a crunch.
+    S.munchNotes.forEach((f, i) => {
+      playNote(f, i * 0.13, 0.11, { type: 'triangle', volume: 0.5, slideTo: f * 0.7 });
+      crunch(i * 0.13);
+    });
+  }
+  else if (name === 'lose') {
+    // Bad: a droopy, muffled "wah, wah, wah, wahhh", the last one sagging down.
+    S.loseNotes.forEach((f, i) => {
+      const lastNote = i === S.loseNotes.length - 1;
+      playNote(f, i * 0.32, lastNote ? 0.85 : 0.28, { type: 'sawtooth', volume: 0.22, muffle: 700, slideTo: lastNote ? f * 0.85 : null });
+    });
+  }
+  else if (name === 'soundOn') {
+    // A friendly two-note "ding-ding" so you know sound is now on.
+    playNote(784, 0, 0.14, { type: 'triangle', volume: 0.3 });
+    playNote(1047, 0.09, 0.2, { type: 'triangle', volume: 0.3 });
+  }
+}
+
+/* =========================================================================
+   SAVING IN THIS BROWSER (localStorage)
+   Saves: progress (level and score at the start of that level), the all-time
+   high score, and stats (games played and won, current and longest winning
+   streak). Every read and write is wrapped in try/catch: private windows or
+   blocked storage can make localStorage throw an error. If that happens the
+   game still works, it just forgets after a reload.
+   ========================================================================= */
+const STORAGE_KEYS = {
+  progress: 'caterpillarHarvest.progress.v1',
+  best:     'caterpillarHarvest.highScore.v1',
+  stats:    'caterpillarHarvest.stats.v1',     // v2.7
+  sound:    'caterpillarHarvest.sound.v1'      // v3.3 - 'on' or 'off'
+};
+
+// v2.7 - Stats kept between visits. The best score is the high score above.
+let stats = { played: 0, won: 0, streak: 0, bestStreak: 0 };
+
+function storageGet(key) {
+  try { return localStorage.getItem(key); }
+  catch (err) { showStorageProblem(); return null; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); return true; }
+  catch (err) { showStorageProblem(); return false; }
+}
+function storageRemove(key) {
+  try { localStorage.removeItem(key); }
+  catch (err) { showStorageProblem(); }
+}
+
+// Tells the player (on the title and Stats screens) that nothing will be kept.
+function showStorageProblem() {
+  for (const note of document.querySelectorAll('.storage-note')) {
+    note.textContent = 'This browser is not letting the game save, so progress, high score and stats reset when the page reloads.';
+    note.hidden = false;
+  }
+}
+
+// Reads the saved high score and stats. Anything strange is ignored.
+function loadSaved() {
+  soundOn = storageGet(STORAGE_KEYS.sound) === 'on';   // v3.3 - sound stays off unless you turned it on before
+  const savedBest = Number(storageGet(STORAGE_KEYS.best));
+  if (Number.isFinite(savedBest) && savedBest > 0) highScore = Math.floor(savedBest);
+
+  // v2.7 - Stats: only accept whole numbers of 0 or more.
+  try {
+    const saved = JSON.parse(storageGet(STORAGE_KEYS.stats));
+    if (saved && typeof saved === 'object') {
+      for (const name of Object.keys(stats)) {
+        const value = Number(saved[name]);
+        if (Number.isInteger(value) && value >= 0) stats[name] = value;
+      }
+    }
+  } catch (err) { /* damaged saved stats: start fresh */ }
+}
+
+function saveStats() {
+  storageSet(STORAGE_KEYS.stats, JSON.stringify(stats));
+}
+
+// v2.7 - Called once at the end of every game.
+function recordGame(won) {
+  stats.played++;
+  if (won) {
+    stats.won++;
+    stats.streak++;
+    stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
+  } else {
+    stats.streak = 0;
+  }
+  saveStats();
+}
+
+// Returns saved progress { level, score } if it is valid, otherwise null.
+function readProgress() {
+  try {
+    const p = JSON.parse(storageGet(STORAGE_KEYS.progress));
+    if (!p) return null;
+    const level = Number(p.level), points = Number(p.score);
+    if (!Number.isInteger(level) || level < 0 || level >= GAME.levels.length) return null;
+    if (!Number.isFinite(points) || points < 0) return null;
+    return { level, score: Math.floor(points) };
+  } catch (err) {
+    return null;     // saved text was damaged
+  }
+}
+
+function saveProgress() {
+  storageSet(STORAGE_KEYS.progress, JSON.stringify({ level: levelIndex, score }));
+}
+
+// Raises the high score if the current score beats it, and saves it.
+function updateHighScore() {
+  if (score > highScore) {
+    highScore = score;
+    storageSet(STORAGE_KEYS.best, String(highScore));
+  }
+}
+
+/* =========================================================================
+   SMALL HELPERS
+   ========================================================================= */
+// Fills {placeholders} in a sentence from GAME.words.
+function fill(text, values) {
+  return text.replace(/\{(\w+)\}/g, (match, name) => (name in values ? values[name] : match));
+}
+function random(min, max) { return min + Math.random() * (max - min); }
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+// Moves angle "from" part of the way toward angle "to", the short way around.
+function blendAngle(from, to, amount) {
+  const diff = Math.atan2(Math.sin(to - from), Math.cos(to - from));
+  return from + diff * amount;
+}
+
+// Says something to screen-reader users.
+function announce(message) {
+  announcer.textContent = '';
+  setTimeout(() => { announcer.textContent = message; }, 50);
+}
+
+// How many vegetables must be harvested to pass this level.
+function needed() { return Math.ceil(levelTotal * GAME.harvestGoal); }
+
+/* =========================================================================
+   CANVAS SIZE — keep it sharp on any screen, and work out where the garden is.
+   ========================================================================= */
+function resizeCanvas() {
+  const ratio = window.devicePixelRatio || 1;
+  width = canvas.clientWidth;
+  height = canvas.clientHeight;
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+  // The garden starts under the top bar (which gets taller when it wraps on phones).
+  gardenTop = header.offsetHeight;
+  document.documentElement.style.setProperty('--header-height', `${gardenTop}px`);
+  gardenHeight = Math.max(100, height - gardenTop);
+
+  // Everything is drawn a bit smaller on phones and a bit bigger on large screens.
+  scale = clamp(Math.min(width, gardenHeight) / 700, 0.55, 1.3);
+
+  placeVegetablePixels();
+  for (const cat of caterpillars) {
+    // v3.2 - Keep caterpillars that are already in the garden inside it. Ones still crawling in
+    // (or out) are left alone, since they're meant to be partly off the edge.
+    if (cat.entered) {
+      for (const seg of cat.segments) { seg.x = clamp(seg.x, 0, width); seg.y = clamp(seg.y, gardenTop, height); }
+    }
+  }
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+
+/* =========================================================================
+   VEGETABLES — planting, ripening and drawing.
+   Positions are stored as fractions of the garden (0 to 1) so they stay in
+   the right place if the window changes size.
+   ========================================================================= */
+function plantVegetables(count) {
+  // Split the garden into a grid with about as many cells as vegetables,
+  // shaped to match the screen, then put one vegetable in random cells.
+  const aspect = width / Math.max(1, gardenHeight * 0.77);
+  const cols = Math.max(2, Math.round(Math.sqrt(count * aspect)));
+  const rows = Math.ceil(count / cols);
+  gardenRows = rows;            // v3.0 - the soil drawing makes one raised bed per row
+  const cells = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) cells.push({ r, c });
+  cells.sort(() => Math.random() - 0.5);    // shuffle
+
+  return cells.slice(0, count).map((cell) => {
+    const type = pickVegetableType();
+    return {
+      id: nextId++,
+      type,
+      // A little random wobble inside each cell so it doesn't look like a perfect grid.
+      // (v2.6 - uses the whole height now that caterpillars come in from the sides.)
+      fx: 0.06 + ((cell.c + 0.5 + random(-0.25, 0.25)) / cols) * 0.88,
+      fy: 0.07 + ((cell.r + 0.5 + random(-0.08, 0.08)) / rows) * 0.86,   // v3.0 - small wobble so they sit on their bed
+      // v2.6 - Each kind ripens in its own time (tomatoes fast, cabbages slow); rarer ones take longer.
+      ripenAt: random(type.ripen[0], type.ripen[1]) * type.ripenSlower * GAME.ripenTimeScale,
+      x: 0, y: 0
+    };
+  });
+}
+
+// v2.3/v2.4 - Chooses what kind of vegetable to plant. Each special kind (rare, extremely rare)
+// gets a chance once the level is high enough, most valuable first; otherwise it's a normal one.
+function pickVegetableType() {
+  const byValue = [...GAME.specialVegetables].sort((a, b) => b.points - a.points);
+  for (const tier of byValue) {
+    if (levelIndex + 1 >= tier.fromLevel && tier.vegetables.length > 0 && Math.random() < tier.chance) {
+      const special = tier.vegetables[Math.floor(Math.random() * tier.vegetables.length)];
+      // v2.6 - A special vegetable ripens like the normal one with the same shape, only slower.
+      const sameShape = GAME.vegetableTypes.find(t => t.shape === special.shape) || GAME.vegetableTypes[0];
+      return { ...special, rare: true, tier, points: tier.points, ripen: special.ripen || sameShape.ripen, ripenSlower: tier.ripenSlower || 1 };
+    }
+  }
+  const normal = GAME.vegetableTypes[Math.floor(Math.random() * GAME.vegetableTypes.length)];
+  return { ...normal, rare: false, points: GAME.pointsPerVegetable, ripenSlower: 1 };
+}
+
+// v2.6 - Each caterpillar picks the vegetable that will be ripe soonest (ripe ones count as "now").
+// A little extra weight for distance means that between two equally ripe ones it picks the closer.
+// Caterpillars choose in turn and skip ones already chosen, so they spread out, unless there
+// aren't enough vegetables left to go around.
+function chooseTargets() {
+  const taken = new Set();
+  for (const cat of caterpillars) {
+    const head = cat.segments[0];
+    let best = null, bestScore = Infinity;
+    for (const veg of vegetables) {
+      if (taken.has(veg) && vegetables.length > caterpillars.length) continue;
+      const secondsUntilRipe = Math.max(0, veg.ripenAt - levelTime);
+      const secondsToReach = Math.hypot(veg.x - head.x, veg.y - head.y) / cat.speed;
+      const score = secondsUntilRipe + secondsToReach * GAME.nearbyPreference;
+      if (score < bestScore) { bestScore = score; best = veg; }
+    }
+    cat.target = best;
+    if (best) taken.add(best);
+  }
+}
+
+// Turns each vegetable's garden fractions into screen pixels.
+function placeVegetablePixels() {
+  for (const veg of vegetables) {
+    veg.x = veg.fx * width;
+    veg.y = gardenTop + veg.fy * gardenHeight;
+  }
+}
+
+function vegRadius() { return GAME.vegetableSize * scale; }
+
+// How ripe a vegetable is, from 0 (just planted) to 1 (ripe).
+function ripeness(veg) {
+  if (veg.ripenAt <= 0) return 1;
+  return clamp(levelTime / veg.ripenAt, 0, 1);
+}
+function isRipe(veg) { return ripeness(veg) >= 1; }
+
+// Takes a vegetable out of the garden (harvested or eaten).
+function removeVegetable(veg) {
+  vegetables = vegetables.filter(v => v !== veg);
+  // If it was the keyboard choice, jump to the nearest remaining vegetable.
+  if (selectedVeg === veg) {
+    selectedVeg = keyboardMode ? nearestVegetable(veg.x, veg.y) : null;
+  }
+}
+
+function nearestVegetable(x, y, maxDistance = Infinity) {
+  let best = null, bestDist = maxDistance;
+  for (const veg of vegetables) {
+    const d = Math.hypot(veg.x - x, veg.y - y);
+    if (d < bestDist) { best = veg; bestDist = d; }
+  }
+  return best;
+}
+
+/* =========================================================================
+   HARVESTING — what happens when the player picks a vegetable.
+   ========================================================================= */
+function harvest(veg) {
+  if (screen !== 'playing' || paused || !veg) return;
+
+  if (!isRipe(veg)) {
+    // Too early: the vegetable wobbles "no", a grey ring appears, and a small "Not ripe" note shows.
+    veg.shakeAge = 0;
+    ring(veg.x, veg.y, vegRadius() * 1.2, vegRadius() * 1.7, 'rgba(220, 210, 190, 0.8)', 0.35, 2);
+    addFloater(veg.x, veg.y - vegRadius(), GAME.words.notRipe, '#d8cfb8', 15);
+    announce(`${veg.type.name}: ${GAME.words.notRipe.toLowerCase()} yet`);
+    startLoop();               // keep animating the effect even if nothing else is moving
+    return;
+  }
+
+  removeVegetable(veg);
+  const points = veg.type.points;      // v2.3 - 1 for normal vegetables, 3 for rare golden ones
+  playSound('harvest', points);        // v3.3 - good sound: a wooden plonk (fancier for rare ones)
+  score += points;
+  levelHarvested++;
+  // v2.2 - Harvest feedback: the vegetable pops, sparkles burst out, a gold ring flashes,
+  // "+1" floats up, and the basket bounces with the score flashing gold.
+  // v2.3 - Rare ones get a bigger burst, a second ring and a bigger "+3".
+  // v2.4 - The more points it's worth, the bigger the celebration ("boost" grows with the points).
+  const rare = veg.type.rare;
+  const boost = rare ? 1 + (points - 1) * 0.4 : 1;           // 3 points → 1.8, 5 points → 2.6
+  const sparkleColors = rare
+    ? ['#ffffff', `rgb(${veg.type.tier.glow})`, veg.type.color, veg.type.leaf]
+    : ['#ffe066', '#fff6c2', veg.type.color];
+  ghosts.push({ type: veg.type, x: veg.x, y: veg.y, mode: 'pop', age: 0, life: 0.3 });
+  burst(veg.x, veg.y, sparkleColors, Math.round(GAME.burstSize * (rare ? boost * 1.4 : 1)), 170 * Math.sqrt(boost), { shape: 'star', sizeBoost: Math.sqrt(boost) });
+  ring(veg.x, veg.y, vegRadius(), vegRadius() * 2.4, 'rgba(255, 224, 102, 0.9)', 0.4);
+  if (rare) ring(veg.x, veg.y, vegRadius() * 1.5, vegRadius() * 1.6 * boost, `rgba(${veg.type.tier.glow}, 0.9)`, 0.6, 4);
+  if (points >= 5) ring(veg.x, veg.y, vegRadius() * 2, vegRadius() * 6, 'rgba(255, 255, 255, 0.7)', 0.8, 3);
+  addFloater(veg.x, veg.y - vegRadius(), `+${points}`, rare ? `rgb(${veg.type.tier.glow})` : '#ffe066', 30 + (points - 1) * 8);
+  pulseClass(document.querySelector('.basket'), 'bump');
+  pulseClass(document.getElementById('scoreText'), 'flash-good');
+  // Beat the old high score for the first time this game? Celebrate it once.
+  if (score > bestAtGameStart && score - points <= bestAtGameStart && bestAtGameStart > 0) {
+    addFloater(width / 2, gardenTop + 40 * scale, GAME.words.newBest, '#9dff8a', 26);
+    pulseClass(document.getElementById('bestText'), 'flash-good');
+  }
+  updateHighScore();
+  updateHud();
+  announce(`Harvested ${rare ? veg.type.tier.label + ' ' : ''}${veg.type.name}, ${points} point${points === 1 ? '' : 's'}. Score ${score}.`);
+  checkLevelEnd();
+}
+
+// Adds a floating text (like "+1") that rises and fades.
+function addFloater(x, y, text, color, size) {
+  floaters.push({ x, y, text, color, size, age: 0 });
+}
+
+/* =========================================================================
+   CATERPILLARS — creating them and moving them.
+   ========================================================================= */
+function makeCaterpillar(number, total, level) {
+  const radius = level.size * scale;
+  const segments = [];
+  for (let i = 0; i < level.length; i++) segments.push({ x: 0, y: 0 });
+
+  const cat = {
+    id: nextId++,
+    segments,
+    radius,
+    // v2.1 - Speed for this level = start speed + the extra speed for each level passed so far.
+    speed: (GAME.startSpeed + levelIndex * GAME.speedUpPerLevel) * scale * (1 + random(-1, 1) * GAME.speedVariety),
+    heading: 0,
+    travel: 0,                          // the direction it's crossing the garden (0 = right, PI/2 = down, PI = left, -PI/2 = up)
+    side: 'left',                       // v3.2 - which edge it came in from: 'left', 'right', 'top' or 'bottom'
+    turn: 0,
+    phase: random(0, Math.PI * 2),
+    depth: Math.random(),               // higher = drawn on top when crossing
+    under: false,
+    entered: false,                     // becomes true once it's inside the garden
+    hue: random(GAME.greenHues[0], GAME.greenHues[1])   // v2.7 - its own shade of green
+  };
+  // Start each one a different distance outside the garden, so they don't all arrive at once.
+  enterFromSide(cat, random(0, 160) * scale);
+  return cat;
+}
+
+// v3.2 - The four edges a caterpillar can come in from: which way it then travels,
+// and which edge is opposite (the one it leaves through).
+const SIDES = {
+  left:   { travel: 0,            opposite: 'right'  },
+  right:  { travel: Math.PI,      opposite: 'left'   },
+  top:    { travel: Math.PI / 2,  opposite: 'bottom' },
+  bottom: { travel: -Math.PI / 2, opposite: 'top'    }
+};
+
+// v2.5/v3.2 - Lines a caterpillar up just outside a random edge (left, right, top or bottom),
+// at a random spot along that edge, pointing into the garden. "extraDistance" holds it
+// further out so it arrives a little later.
+function enterFromSide(cat, extraDistance = 0) {
+  const r = cat.radius;
+  const gap = r * GAME.segmentGap;
+  const names = Object.keys(SIDES);
+  cat.side = names[Math.floor(Math.random() * names.length)];
+  cat.travel = SIDES[cat.side].travel;
+
+  // Where the head starts: just outside the chosen edge, somewhere along it.
+  const along = random(0.1, 0.9);
+  const out = r + extraDistance;
+  let x, y;
+  if (cat.side === 'left')   { x = -out;                 y = gardenTop + gardenHeight * along; }
+  if (cat.side === 'right')  { x = width + out;          y = gardenTop + gardenHeight * along; }
+  if (cat.side === 'top')    { x = width * along;        y = gardenTop - out; }
+  if (cat.side === 'bottom') { x = width * along;        y = height + out; }
+
+  // The body trails straight back out of the garden behind the head.
+  const backX = -Math.cos(cat.travel), backY = -Math.sin(cat.travel);
+  cat.segments.forEach((seg, i) => { seg.x = x + backX * i * gap; seg.y = y + backY * i * gap; });
+  cat.heading = cat.travel;
+  cat.turn = 0;
+  cat.entered = false;
+}
+
+function moveCaterpillar(cat, dt) {
+  const head = cat.segments[0];
+  const r = cat.radius;
+
+  // 1) Which way does it want to go? Toward the vegetable it picked in chooseTargets() (v2.6).
+  //    With nothing left to chase, it crosses toward the far side (v2.5).
+  let wanted = cat.travel;
+  const food = cat.target;
+  if (food) wanted = blendAngle(wanted, Math.atan2(food.y - head.y, food.x - head.x), GAME.hunger);
+
+  // 2) Random wandering, then turn gently toward where it wants to go.
+  cat.turn += (Math.random() - 0.5) * GAME.wander * 6 * dt;
+  cat.turn = clamp(cat.turn, -GAME.wander, GAME.wander);
+  cat.heading += cat.turn * dt;
+  cat.heading = blendAngle(cat.heading, wanted, Math.min(1, dt * 1.5));
+
+  // 3) Crawl forward. The speed rises and falls like scrunching and stretching (smooth in calm mode).
+  cat.phase += dt * GAME.crawlRhythm * Math.PI * 2;
+  const pulse = calm ? 1 : (1 - GAME.inchPulse) + GAME.inchPulse * (1 + Math.sin(cat.phase));
+  head.x += Math.cos(cat.heading) * cat.speed * pulse * dt;
+  head.y += Math.sin(cat.heading) * cat.speed * pulse * dt;
+
+  // 4) Edges (v3.2): the edge opposite where it came in is open, so it can crawl out there.
+  //    It bounces off the other edges, including the one it came in from once it's inside.
+  if (head.x > r * 2 && head.x < width - r * 2 && head.y > gardenTop + r * 2 && head.y < height - r * 2) cat.entered = true;
+  const exitSide = SIDES[cat.side].opposite;
+  const bounces = (edge) => edge !== exitSide && (edge !== cat.side || cat.entered);
+  if (bounces('left')   && head.x < r)             { head.x = r;             cat.heading = Math.PI - cat.heading; cat.turn *= -0.5; }
+  if (bounces('right')  && head.x > width - r)     { head.x = width - r;     cat.heading = Math.PI - cat.heading; cat.turn *= -0.5; }
+  if (bounces('top')    && head.y < gardenTop + r) { head.y = gardenTop + r; cat.heading = -cat.heading;           cat.turn *= -0.5; }
+  if (bounces('bottom') && head.y > height - r)    { head.y = height - r;    cat.heading = -cat.heading;           cat.turn *= -0.5; }
+
+  // 5) The body follows the head like beads on a string.
+  const gap = r * GAME.segmentGap;
+  for (let i = 1; i < cat.segments.length; i++) {
+    const ahead = cat.segments[i - 1], seg = cat.segments[i];
+    const dx = ahead.x - seg.x, dy = ahead.y - seg.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > gap) { const pull = (dist - gap) / dist; seg.x += dx * pull; seg.y += dy * pull; }
+  }
+
+  // 6) Whole body gone out through the far edge? Come back in from a new random edge and spot.
+  const tail = cat.segments[cat.segments.length - 1];
+  const gone =
+    (exitSide === 'right'  && tail.x > width + r) ||
+    (exitSide === 'left'   && tail.x < -r) ||
+    (exitSide === 'bottom' && tail.y > height + r) ||
+    (exitSide === 'top'    && tail.y < gardenTop - r);
+  if (gone) enterFromSide(cat, random(0, 120) * scale);
+
+  // 7) Munch any vegetable the head touches.
+  for (const veg of vegetables) {
+    if (Math.hypot(veg.x - head.x, veg.y - head.y) < vegRadius() * 0.8 + r * 0.7) {
+      cat.chompAge = 0;          // v2.2 - the head bulges for a moment: CHOMP
+      eatVegetable(veg);
+      break;
+    }
+  }
+}
+
+// A caterpillar eats a vegetable.
+function eatVegetable(veg) {
+  playSound('munch');              // v3.3 - bad sound: a low nom nom
+  removeVegetable(veg);
+  levelEaten++;
+  // v2.2 - Eating feedback: the vegetable shrinks away, crumbs fly, a red ring flashes,
+  // and the goal text flashes red.
+  ghosts.push({ type: veg.type, x: veg.x, y: veg.y, mode: 'shrink', age: 0, life: 0.35 });
+  burst(veg.x, veg.y, [veg.type.color, veg.type.leaf], 10, 90, { life: 0.5 });
+  ring(veg.x, veg.y, vegRadius() * 0.8, vegRadius() * 2, 'rgba(255, 80, 60, 0.85)', 0.4);
+  pulseClass(document.getElementById('goalText'), 'flash-bad');
+  updateHud();
+  announce(`A caterpillar ate a ${veg.type.name}. ${vegetables.length} left.`);
+  checkLevelEnd();
+}
+
+/* =========================================================================
+   MEETINGS — when one caterpillar's head touches another caterpillar, the
+   pair randomly choose to bounce apart or for one to crawl underneath.
+   They keep that choice until they separate.
+   ========================================================================= */
+function handleMeetings(dt) {
+  const touchingNow = new Set();
+  for (const cat of caterpillars) cat.under = false;
+
+  for (let a = 0; a < caterpillars.length; a++) {
+    for (let b = a + 1; b < caterpillars.length; b++) {
+      const catA = caterpillars[a], catB = caterpillars[b];
+      const hitA = headTouches(catA, catB);
+      const hitB = headTouches(catB, catA);
+      if (!hitA && !hitB) continue;
+
+      const key = `${Math.min(catA.id, catB.id)}-${Math.max(catA.id, catB.id)}`;
+      touchingNow.add(key);
+      if (!meetings.has(key)) {
+        meetings.set(key, Math.random() < GAME.bounceChance ? 'bounce' : 'under');
+        // v2.2 - A bump makes little stars where they touch.
+        if (meetings.get(key) === 'bounce') {
+          const hit = hitA || hitB, head = (hitA ? catA : catB).segments[0];
+          const mx = (head.x + hit.seg.x) / 2, my = (head.y + hit.seg.y) / 2;
+          burst(mx, my, ['#ffffff', '#fff6c2'], 7, 110, { shape: 'star' });
+          ring(mx, my, 6, 26 * scale, 'rgba(255, 255, 255, 0.7)', 0.3, 2);
+        }
+      }
+
+      if (meetings.get(key) === 'bounce') {
+        if (hitA) steerAway(catA, hitA, dt);
+        if (hitB) steerAway(catB, hitB, dt);
+      } else {
+        (catA.depth < catB.depth ? catA : catB).under = true;
+      }
+    }
+  }
+  for (const key of meetings.keys()) if (!touchingNow.has(key)) meetings.delete(key);
+}
+
+// Does this caterpillar's head overlap any part of the other one?
+function headTouches(cat, other) {
+  const head = cat.segments[0];
+  const reach = cat.radius + other.radius;
+  for (const seg of other.segments) {
+    const dist = Math.hypot(head.x - seg.x, head.y - seg.y);
+    if (dist < reach) return { seg, dist, reach };
+  }
+  return null;
+}
+
+// Turns the head away from what it bumped and slides it out of the overlap.
+function steerAway(cat, hit, dt) {
+  const head = cat.segments[0];
+  let dx = head.x - hit.seg.x, dy = head.y - hit.seg.y;
+  if (dx === 0 && dy === 0) { dx = Math.cos(cat.heading); dy = Math.sin(cat.heading); }
+  cat.heading = blendAngle(cat.heading, Math.atan2(dy, dx), Math.min(1, dt * (calm ? 4 : 10)));
+  const len = Math.hypot(dx, dy);
+  const push = Math.min(hit.reach - hit.dist, (calm ? 30 : 90) * dt);
+  head.x += (dx / len) * push;
+  head.y += (dy / len) * push;
+}
+
+/* =========================================================================
+   UPDATE — move everything forward by dt seconds.
+   Using real time keeps the speed the same on every screen.
+   ========================================================================= */
+function updateGame(dt) {
+  levelTime += dt;
+
+  // v2.2 - Vegetables: notice the moment each one ripens (it pops and sparkles),
+  // and advance their wobble / pop timers.
+  for (const veg of vegetables) {
+    if (!veg.ripeShown && isRipe(veg)) {
+      veg.ripeShown = true;
+      playSound('ripen');          // v3.3 - good sound: a little plip
+      veg.popAge = 0;
+      burst(veg.x, veg.y, ['#fff6c2', '#ffe066'], 6, 60, { life: 0.5 });
+      ring(veg.x, veg.y, vegRadius() * 0.9, vegRadius() * 1.6, 'rgba(255, 245, 190, 0.6)', 0.4, 2);
+    }
+  }
+
+  chooseTargets();     // v2.6 - each caterpillar picks the next-ripest vegetable to head for
+  for (const cat of caterpillars) {
+    cat.chompAge = (cat.chompAge ?? 99) + dt;
+    moveCaterpillar(cat, dt);
+    if (screen !== 'playing') return;   // the level ended during this step
+  }
+  handleMeetings(dt);
+}
+
+// v2.2 - Moves and ages all the feedback effects. These keep running for a moment
+// after a level ends so the last pop or burst can finish.
+function updateEffects(dt) {
+  elapsed += dt;
+  selectPopAge += dt;
+
+  // Vegetable wobble ("not ripe") and ripening pop timers.
+  for (const veg of vegetables) {
+    veg.shakeAge = (veg.shakeAge ?? 99) + dt;
+    veg.popAge = (veg.popAge ?? 99) + dt;
+  }
+
+  for (const f of floaters) f.age += dt;
+  floaters = floaters.filter(f => f.age < (f.life || 0.9));   // most last 0.9 s; messages can last longer
+
+  for (const p of particles) {
+    p.age += dt;
+    p.vy += p.gravity * dt;          // petals fall
+    if (p.maxFall) p.vy = Math.min(p.vy, p.maxFall);   // ...but gently
+    p.vx *= 1 - 2.5 * dt;            // sparkles slow down as they spread
+    if (!p.gravity) p.vy *= 1 - 2.5 * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (p.sway) p.x += Math.cos(p.age * p.swaySpeed + p.swayPhase) * p.sway * dt;   // drifting on the breeze
+  }
+  particles = particles.filter(p => p.age < p.life);
+
+  for (const r of rings) r.age += dt;
+  rings = rings.filter(r => r.age < r.life);
+
+  for (const g of ghosts) g.age += dt;
+  ghosts = ghosts.filter(g => g.age < g.life);
+
+  if (banner) { banner.age += dt; if (banner.age > banner.life) banner = null; }
+}
+
+// True while any effect is still playing (so the animation loop keeps going).
+function effectsActive() {
+  return floaters.length || particles.length || rings.length || ghosts.length || banner ||
+         selectPopAge < 0.3 ||
+         vegetables.some(v => (v.shakeAge ?? 99) < 0.4);
+}
+
+/* =========================================================================
+   LEVELS — starting a level, finishing it, winning and losing.
+   ========================================================================= */
+function startLevel() {
+  const level = GAME.levels[levelIndex];
+  levelTotal = level.vegetables;
+  levelHarvested = 0;
+  levelEaten = 0;
+  levelTime = 0;
+  vegetables = plantVegetables(level.vegetables);
+  placeVegetablePixels();
+  caterpillars = [];
+  for (let i = 0; i < level.caterpillars; i++) caterpillars.push(makeCaterpillar(i, level.caterpillars, level));
+  floaters = [];
+  particles = [];
+  rings = [];
+  ghosts = [];
+  meetings.clear();
+  selectedVeg = null;
+  clearTimeout(endTimer);
+  showBanner(`Level ${levelIndex + 1}`);   // v2.2 - big "Level N" pops up as the level begins
+
+  screen = 'playing';
+  saveProgress();               // so "Continue" can restart this level later
+  updateHud();
+  hideOverlays();
+  pauseBtn.disabled = false;
+  document.getElementById('statsBtn').disabled = false;   // v2.7
+  setPaused(false, true);
+  startLoop();
+  canvas.focus();
+  // v2.3/v2.4 - On the first level where a special kind can grow, explain it once.
+  let rareNote = '';
+  GAME.specialVegetables
+    .filter(tier => tier.fromLevel === levelIndex + 1)
+    .forEach((tier, i) => {
+      const text = fill(tier.message, { points: tier.points });
+      rareNote += ' ' + text;
+      floaters.push({ x: width / 2, y: gardenTop + gardenHeight * (0.55 + i * 0.07), text, color: `rgb(${tier.glow})`, size: 22, age: 0, life: 3.5 });
+    });
+  announce(`Level ${levelIndex + 1}. ${level.caterpillars} caterpillars. Harvest at least ${needed()} of ${levelTotal} vegetables.${rareNote}`);
+}
+
+// After each harvest or bite: did the player lose, or is the garden empty?
+function checkLevelEnd() {
+  if (screen !== 'playing') return;
+
+  // Lost: the caterpillars have eaten so many that the goal can't be reached.
+  if (levelEaten > levelTotal - needed()) { endGame(false); return; }
+
+  // Garden empty: level done.
+  if (vegetables.length === 0) {
+    if (levelIndex >= GAME.levels.length - 1) { endGame(true); return; }
+    levelCleared();
+  }
+}
+
+function levelCleared() {
+  playSound('level');              // v3.3 - good sound: a little tune
+  screen = 'levelDone';
+  pauseBtn.disabled = true;
+  document.getElementById('statsBtn').disabled = true;    // v2.7 - wait for the next screen
+  // v2.2 - Celebrate first, then show the screen after a short pause.
+  showBanner('Cleared!', '#9dff8a');
+  fallingPetals();
+  startLoop();
+  clearTimeout(endTimer);
+  endTimer = setTimeout(showLevelScreen, GAME.screenDelaySeconds * 1000);
+  // Save progress as "ready to start the next level".
+  levelIndex++;
+  saveProgress();
+  levelIndex--;
+
+  document.getElementById('levelHeading').textContent = fill(GAME.words.levelCleared, { level: levelIndex + 1 });
+  document.getElementById('levelMessage').textContent = fill(GAME.words.levelMessage, { harvested: levelHarvested, total: levelTotal });
+  document.getElementById('levelScore').textContent = `Score: ${score}`;
+  nextBtn.textContent = GAME.words.nextLevel;
+  announce(`${document.getElementById('levelHeading').textContent} Score ${score}.`);
+}
+
+// v2.2 - Shown a moment after the level is cleared.
+function showLevelScreen() {
+  if (screen === 'levelDone') showOverlay(levelScreen, nextBtn);
+}
+
+function endGame(won) {
+  screen = 'over';
+  pauseBtn.disabled = true;
+  document.getElementById('statsBtn').disabled = true;    // v2.7 - wait for the next screen
+  // v2.2 - Winning: petals (v3.3) and a banner. Losing: the garden shakes and a red banner shows.
+  if (won) { showBanner('You win!', '#9dff8a'); fallingPetals(); }
+  else { showBanner('Oh no!', '#ff7a6b'); pulseClass(canvas, 'shake'); }
+  playSound(won ? 'win' : 'lose'); // v3.3 - happy tune with birds, or a droopy wah-wah
+  startLoop();
+  clearTimeout(endTimer);
+  endTimer = setTimeout(() => { if (screen === 'over') showOverlay(endScreen, againBtn); }, GAME.screenDelaySeconds * 1000);
+  updateHighScore();
+  recordGame(won);                        // v2.7 - update games played, wins and streak
+  storageRemove(STORAGE_KEYS.progress);   // game finished: nothing to continue
+
+  const heading = won ? GAME.words.winTitle : GAME.words.loseTitle;
+  endScreen.classList.toggle('lost', !won);   // v3.0 - shows the full basket or the full caterpillar
+  const message = won
+    ? fill(GAME.words.winMessage, { levels: GAME.levels.length })
+    : fill(GAME.words.loseMessage, { level: levelIndex + 1 });
+  const isNewBest = score > bestAtGameStart && score > 0;
+
+  document.getElementById('endHeading').textContent = heading;
+  document.getElementById('endMessage').textContent = message;
+  document.getElementById('endScore').textContent = `Final score: ${score}`;
+  document.getElementById('endBest').textContent = isNewBest ? `${GAME.words.newBest} 🎉` : `High score: ${highScore}`;
+  announce(`${heading} ${message} Final score ${score}. ${isNewBest ? GAME.words.newBest : `High score ${highScore}.`}`);
+}
+
+function newGame() {
+  levelIndex = 0;
+  score = 0;
+  bestAtGameStart = highScore;
+  startLevel();
+}
+
+function continueGame() {
+  const progress = readProgress();
+  if (!progress) { newGame(); return; }
+  levelIndex = progress.level;
+  score = progress.score;
+  bestAtGameStart = highScore;
+  startLevel();
+}
+
+function nextLevel() {
+  levelIndex++;
+  startLevel();
+}
+
+/* =========================================================================
+   SCREENS AND THE TOP BAR
+   ========================================================================= */
+function showOverlay(overlay, buttonToFocus) {
+  hideOverlays();
+  overlay.hidden = false;
+  buttonToFocus.focus();
+}
+function hideOverlays() {
+  titleScreen.hidden = true;
+  levelScreen.hidden = true;
+  endScreen.hidden = true;
+}
+
+function showTitle() {
+  screen = 'title';
+  document.getElementById('titleBest').textContent = highScore > 0 ? `High score: ${highScore}` : '';
+  const progress = readProgress();
+  continueBtn.hidden = !progress;
+  if (progress) continueBtn.textContent = `${fill(GAME.words.continueLabel, { level: progress.level + 1 })} (score ${progress.score})`;
+  showOverlay(titleScreen, playBtn);
+}
+
+// Updates the basket and the goal text in the top bar.
+function updateHud() {
+  document.getElementById('scoreText').textContent = `Score ${score}`;
+  document.getElementById('levelText').textContent = `Level ${levelIndex + 1} of ${GAME.levels.length}`;
+  document.getElementById('bestText').textContent = `Best ${highScore}`;
+  const goal = document.getElementById('goalText');
+  if (screen === 'title') goal.textContent = 'Harvest the ripe vegetables!';
+  else if (levelHarvested >= needed()) goal.textContent = GAME.words.goalMet;
+  else goal.textContent = fill(GAME.words.goalLeft, { n: needed() - levelHarvested });
+}
+
+/* =========================================================================
+   PAUSE — button, P key, and automatically when you switch tabs.
+   ========================================================================= */
+function setPaused(shouldPause, quiet = false) {
+  if (screen !== 'playing' && shouldPause) return;
+  if (paused === shouldPause) return;
+  paused = shouldPause;
+  pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  pauseBtn.setAttribute('aria-pressed', String(paused));
+  pausedBadge.hidden = !paused;
+  // Paused: the loop stops by itself once any effects finish. Resumed: start it again.
+  if (!paused && screen === 'playing') startLoop();
+  draw();
+  if (!quiet) announce(paused ? 'Paused' : 'Playing');
+}
+
+pauseBtn.addEventListener('click', () => setPaused(!paused));
+document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
+
+/* =========================================================================
+   ANIMATION LOOP
+   ========================================================================= */
+function frame(now) {
+  if (lastTime === null) lastTime = now;
+  const dt = Math.min((now - lastTime) / 1000, 0.05);   // capped so a hiccup can't cause a jump
+  lastTime = now;
+  if (screen === 'playing' && !paused) updateGame(dt);
+  updateEffects(dt);
+  draw();
+  // Keep going while the game is being played, or while an effect is still finishing.
+  if ((screen === 'playing' && !paused) || effectsActive()) frameRequest = requestAnimationFrame(frame);
+  else frameRequest = null;
+}
+function startLoop() {
+  if (frameRequest !== null) return;
+  lastTime = null;           // don't count time spent paused
+  frameRequest = requestAnimationFrame(frame);
+}
+function stopLoop() {
+  if (frameRequest !== null) cancelAnimationFrame(frameRequest);
+  frameRequest = null;
+}
+
+/* =========================================================================
+   DRAWING
+   ========================================================================= */
+function draw() {
+  drawSoil();
+  ctx.save();
+  // Only draw inside the garden (under the top bar is off limits).
+  ctx.beginPath();
+  ctx.rect(0, gardenTop, width, height - gardenTop);
+  ctx.clip();
+
+  for (const veg of vegetables) drawVegetable(veg);
+  drawGhosts();
+  drawSelection();
+  const ordered = [...caterpillars].sort((p, q) => p.depth - q.depth);
+  for (const cat of ordered) drawCaterpillar(cat);
+  drawRings();
+  drawParticles();
+  drawFloaters();
+  drawBanner();
+
+  // v2.2 - While paused, the garden dims so it's obvious nothing is moving.
+  if (paused && screen === 'playing') {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(0, gardenTop, width, height - gardenTop);
+  }
+  ctx.restore();
+}
+
+/* ---------- v2.2 effect drawing ---------- */
+
+// A harvested vegetable swells and fades; an eaten one shrinks away (calm mode: fades only).
+function drawGhosts() {
+  for (const g of ghosts) {
+    const t = g.age / g.life;
+    let size = 1;
+    if (!calm) size = g.mode === 'pop' ? 1 + 0.5 * t : 1 - t;
+    drawVegetable({ type: g.type, x: g.x, y: g.y, ripenAt: 0 }, Math.max(size, 0.01), 1 - t);
+  }
+}
+
+function drawRings() {
+  for (const r of rings) {
+    const t = r.age / r.life;
+    ctx.globalAlpha = 1 - t;
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = r.lineWidth;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, r.r0 + (r.r1 - r.r0) * (1 - (1 - t) * (1 - t)), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Sparkles are 4-point stars, crumbs are dots, petals are little teardrop-shaped flower petals.
+function drawParticles() {
+  for (const p of particles) {
+    // Petals stay bright and only fade at the very end; everything else fades the whole time.
+    ctx.globalAlpha = p.shape === 'petal'
+      ? clamp(Math.min(p.age / 0.3, (p.life - p.age) / 0.7), 0, 1)    // petals fade in, then out at the end
+      : 1 - p.age / p.life;
+    ctx.fillStyle = p.color;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.age * p.spin + (p.swayPhase || 0));
+    if (p.shape === 'petal') {
+      // v3.3 - Squashing it sideways back and forth makes it look like it's flipping over as it falls.
+      ctx.scale(0.35 + 0.65 * Math.abs(Math.cos(p.age * p.flutter)), 1);
+      const s = p.size;
+      ctx.beginPath();
+      ctx.moveTo(0, -s);
+      ctx.quadraticCurveTo(s * 0.9, -s * 0.15, 0, s);
+      ctx.quadraticCurveTo(-s * 0.9, -s * 0.15, 0, -s);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = Math.max(1, s * 0.14);
+      ctx.strokeStyle = 'rgba(80, 30, 50, 0.75)';      // soft cartoon outline
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';    // a light vein down the middle
+      ctx.lineWidth = Math.max(0.8, s * 0.08);
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.6);
+      ctx.lineTo(0, s * 0.6);
+      ctx.stroke();
+    } else if (p.shape === 'star') {
+      const s = p.size * 1.6;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const rad = i % 2 === 0 ? s : s * 0.35;
+        const a = (i * Math.PI) / 4;
+        ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Big text that pops in (calm mode: fades in), stays, then fades out.
+function drawBanner() {
+  if (!banner) return;
+  const fadeIn = Math.min(1, banner.age / 0.2), fadeOut = Math.min(1, (banner.life - banner.age) / 0.4);
+  const pop = calm ? 1 : 1 + 0.35 * Math.max(0, 1 - banner.age / 0.25) * Math.sin(banner.age * 25);
+  ctx.save();
+  ctx.globalAlpha = Math.min(fadeIn, fadeOut);
+  ctx.translate(width / 2, gardenTop + gardenHeight * 0.42);
+  ctx.scale(pop, pop);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 ${Math.round(64 * Math.max(scale, 0.7))}px ${CANVAS_FONT}`;
+  ctx.lineWidth = 10;                     // v3.0 - thick cartoon outline
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = OUTLINE;
+  ctx.strokeText(banner.text, 0, 0);
+  ctx.fillStyle = banner.color;
+  ctx.fillText(banner.text, 0, 0);
+  ctx.restore();
+}
+
+// v3.0 - Cartoon garden soil: raised, rounded beds (one per vegetable row) with outlines,
+// little grass tufts and pebbles in the paths between them. It's drawn once onto a hidden
+// canvas and then copied each frame, which is much faster than redrawing every tuft.
+function drawSoil() {
+  const key = `${width}x${height}x${gardenTop}x${gardenRows}x${canvas.width}`;
+  if (!soilCanvas || soilCanvas.key !== key) {
+    soilCanvas = renderSoil();
+    soilCanvas.key = key;
+  }
+  ctx.drawImage(soilCanvas, 0, 0, width, height);
+}
+
+// A rectangle with fully rounded ends (works in every browser).
+function roundedRect(g, x, y, w, h, radius) {
+  const r = Math.min(radius, h / 2, w / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+function renderSoil() {
+  const ratio = window.devicePixelRatio || 1;
+  const off = document.createElement('canvas');
+  off.width = canvas.width;
+  off.height = canvas.height;
+  const g = off.getContext('2d');
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+  // 1) The ground between the beds.
+  g.fillStyle = '#20150b';
+  g.fillRect(0, 0, width, height);
+
+  // 2) One raised bed per row, lined up with where the vegetables are planted.
+  const rowHeight = (gardenHeight * 0.86) / gardenRows;
+  const bedHeight = Math.min(rowHeight * 0.64, 96 * scale);
+  const bedX = width * 0.025, bedW = width * 0.95;
+  const beds = [];
+  for (let r = 0; r < gardenRows; r++) {
+    const cy = gardenTop + gardenHeight * (0.07 + ((r + 0.5) / gardenRows) * 0.86);
+    const top = cy - bedHeight / 2;
+    beds.push({ top, bottom: top + bedHeight });
+
+    // Soft shadow under the bed
+    g.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    roundedRect(g, bedX, top + 6 * scale, bedW, bedHeight, bedHeight / 2);
+    g.fill();
+    // The bed itself: rich soil, lighter at the top so it looks rounded
+    const fill = g.createLinearGradient(0, top, 0, top + bedHeight);
+    fill.addColorStop(0, '#5a3a1f');
+    fill.addColorStop(0.5, '#472d17');
+    fill.addColorStop(1, '#37210f');
+    g.fillStyle = fill;
+    roundedRect(g, bedX, top, bedW, bedHeight, bedHeight / 2);
+    g.fill();
+    g.lineWidth = Math.max(2, 3 * scale);
+    g.strokeStyle = '#120a04';
+    g.stroke();
+    // Shine along the top edge
+    g.strokeStyle = 'rgba(255, 214, 160, 0.14)';
+    g.lineWidth = Math.max(1.5, 3 * scale);
+    g.beginPath();
+    g.moveTo(bedX + bedHeight / 2, top + bedHeight * 0.18);
+    g.lineTo(bedX + bedW - bedHeight / 2, top + bedHeight * 0.18);
+    g.stroke();
+    // Crumbly soil specks
+    g.fillStyle = 'rgba(20, 10, 4, 0.45)';
+    for (let i = 0; i < bedW / 14; i++) {
+      g.beginPath();
+      g.arc(bedX + random(bedHeight * 0.4, bedW - bedHeight * 0.4), random(top + bedHeight * 0.25, top + bedHeight * 0.85), random(1, 2.6) * scale, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // 3) Grass tufts and pebbles in the paths between beds (and at the top and bottom).
+  const gaps = [];
+  let prevBottom = gardenTop;
+  for (const bed of beds) { gaps.push([prevBottom, bed.top]); prevBottom = bed.bottom + 6 * scale; }
+  gaps.push([prevBottom, height]);
+  for (const [gapTop, gapBottom] of gaps) {
+    if (gapBottom - gapTop < 8 * scale) continue;
+    for (let x = random(10, 50); x < width; x += random(50, 110) * scale) {
+      const y = random(gapTop + 4 * scale, gapBottom - 2 * scale);
+      if (Math.random() < 0.7) drawTuft(g, x, y, random(12, 19) * scale);
+      else drawPebble(g, x, y, random(3, 6) * scale);
+    }
+  }
+  return off;
+}
+
+// Three little cartoon grass blades.
+function drawTuft(g, x, y, size) {
+  g.fillStyle = '#3f7d35';
+  g.strokeStyle = '#132b0e';
+  g.lineWidth = Math.max(1.2, size * 0.16);
+  g.lineJoin = 'round';
+  for (const [dx, lean, tall] of [[-0.5, -0.5, 0.8], [0, 0.1, 1.1], [0.5, 0.6, 0.85]]) {
+    g.beginPath();
+    g.moveTo(x + dx * size - size * 0.22, y);
+    g.quadraticCurveTo(x + dx * size + lean * size * 0.3, y - size * tall * 0.6, x + dx * size + lean * size * 0.5, y - size * tall);
+    g.quadraticCurveTo(x + dx * size + lean * size * 0.1, y - size * tall * 0.4, x + dx * size + size * 0.22, y);
+    g.closePath();
+    g.fill();
+    g.stroke();
+  }
+}
+
+function drawPebble(g, x, y, size) {
+  g.fillStyle = '#6e5a45';
+  g.strokeStyle = '#1a1009';
+  g.lineWidth = Math.max(1, size * 0.3);
+  g.beginPath();
+  g.ellipse(x, y, size * 1.3, size, 0, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+}
+
+// Draws one vegetable. Unripe ones are small and faded with a ring that fills as they grow.
+// extraScale and alpha are used for the harvest "pop" and the eaten "shrink" (v2.2).
+function drawVegetable(veg, extraScale = 1, alpha = 1) {
+  const r = vegRadius();
+  const ripe = ripeness(veg);
+  let grow = (0.45 + 0.55 * ripe) * extraScale;
+
+  // v2.2 - Wobble side to side after a "not ripe" tap, and bounce bigger the moment it ripens.
+  let wobble = 0;
+  if (!calm && (veg.shakeAge ?? 99) < 0.4) wobble = Math.sin(veg.shakeAge * 45) * 5 * scale * (1 - veg.shakeAge / 0.4);
+  if (!calm && (veg.popAge ?? 99) < 0.35) grow *= 1 + 0.3 * Math.sin(Math.PI * veg.popAge / 0.35);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(veg.x + wobble, veg.y);
+
+  // v2.3 - Rare vegetables glow gold, wider and brighter; normal ones glow pale yellow.
+  const rare = veg.type.rare;
+  const glowColor = rare ? veg.type.tier.glow : '255, 245, 190';   // v2.4 - each rarity has its own glow color
+
+  if (ripe >= 1) {
+    // Ripe: soft, steady light around it.
+    const glowR = r * (rare ? 2.4 : 1.8);
+    const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, glowR);
+    glow.addColorStop(0, `rgba(${glowColor}, ${rare ? 0.6 : 0.35})`);
+    glow.addColorStop(1, `rgba(${glowColor}, 0)`);
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, glowR, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Unripe: a thin ring shows how close it is to ripe (gold for rare ones).
+    ctx.strokeStyle = `rgba(${glowColor}, 0.18)`;
+    ctx.lineWidth = rare ? 4 : 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(${glowColor}, ${rare ? 0.95 : 0.7})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.35, -Math.PI / 2, -Math.PI / 2 + ripe * Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.7 * alpha;
+  }
+
+  // v3.0 - A soft cartoon shadow on the ground under the vegetable.
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.95 * grow, r * 0.75 * grow, r * 0.22 * grow, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.scale(grow, grow);
+  const t = veg.type;
+  if (t.shape === 'carrot') drawCarrot(r, t);
+  else if (t.shape === 'tomato') drawTomato(r, t);
+  else if (t.shape === 'cabbage') drawCabbage(r, t);
+  else if (t.shape === 'eggplant') drawEggplant(r, t);
+  else drawPumpkin(r, t);
+
+  // v2.3 - Rare vegetables have little stars around them that twinkle (steady in calm mode).
+  // v2.4 - The number of stars comes from the rarity (3 for rare, 5 for extremely rare).
+  if (t.rare) {
+    const starCount = t.tier.stars;
+    ctx.fillStyle = '#fff6c2';
+    for (let i = 0; i < starCount; i++) {
+      const a = -Math.PI / 2 + i * (Math.PI * 2 / starCount) + (calm ? 0 : elapsed * 0.8);
+      const twinkle = calm ? 1 : 0.6 + 0.4 * Math.sin(elapsed * 4 + i * 2);
+      const s = r * 0.22 * twinkle;
+      const sx = Math.cos(a) * r * 1.25, sy = Math.sin(a) * r * 1.25;
+      ctx.beginPath();
+      for (let k = 0; k < 8; k++) {
+        const rad = k % 2 === 0 ? s : s * 0.35;
+        ctx.lineTo(sx + Math.cos(k * Math.PI / 4) * rad, sy + Math.sin(k * Math.PI / 4) * rad);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/* ---------- v3.0 cartoon vegetables: every shape gets a thick dark outline ---------- */
+const OUTLINE = '#1d120a';
+// Fills the current shape, then traces round it with the cartoon outline.
+function fillAndOutline(r, fillStyle) {
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  ctx.lineWidth = Math.max(1.6, r * 0.11);
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+// A white shine spot that makes things look round and glossy.
+function shine(x, y, rx, ry, angle = -0.5, alpha = 0.55) {
+  ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, angle, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawCarrot(r, t) {
+  // Three round leaves on top
+  for (const a of [-0.55, 0.55, 0]) {
+    ctx.beginPath();
+    ctx.ellipse(Math.sin(a) * r * 0.45, -r * 0.9, r * 0.2, r * 0.45, a, 0, Math.PI * 2);
+    fillAndOutline(r, t.leaf);
+  }
+  // Chubby orange root
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.55, -r * 0.45);
+  ctx.quadraticCurveTo(0, -r * 0.75, r * 0.55, -r * 0.45);
+  ctx.quadraticCurveTo(r * 0.35, r * 0.4, r * 0.05, r * 1.1);
+  ctx.quadraticCurveTo(0, r * 1.18, -r * 0.05, r * 1.1);
+  ctx.quadraticCurveTo(-r * 0.35, r * 0.4, -r * 0.55, -r * 0.45);
+  ctx.closePath();
+  fillAndOutline(r, t.color);
+  shine(-r * 0.22, -r * 0.2, r * 0.08, r * 0.25, 0.2);
+  // Little ridges
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1.2, r * 0.07);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.05, -r * 0.05); ctx.lineTo(r * 0.25, -r * 0.05);
+  ctx.moveTo(-r * 0.2, r * 0.35);   ctx.lineTo(r * 0.02, r * 0.35);
+  ctx.stroke();
+}
+
+function drawTomato(r, t) {
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.08, r * 0.92, r * 0.82, 0, 0, Math.PI * 2);
+  fillAndOutline(r, t.color);
+  shine(-r * 0.38, -r * 0.18, r * 0.2, r * 0.13);
+  // Green star-shaped top
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * (Math.PI / 5);
+    const rad = i % 2 === 0 ? r * 0.45 : r * 0.16;
+    ctx.lineTo(Math.cos(a) * rad, -r * 0.62 + Math.sin(a) * rad * 0.55);
+  }
+  ctx.closePath();
+  fillAndOutline(r, t.leaf);
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.7);
+  ctx.quadraticCurveTo(r * 0.05, -r * 0.95, r * 0.2, -r * 1.02);
+  ctx.lineWidth = Math.max(2, r * 0.13);
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
+}
+
+function drawCabbage(r, t) {
+  // Outer leaves: a wavy round shape
+  ctx.beginPath();
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const rad = r * (1 + 0.07 * Math.sin(a * 6));
+    ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+  }
+  ctx.closePath();
+  fillAndOutline(r, t.leaf);
+  // Pale heart
+  ctx.beginPath();
+  ctx.arc(0, r * 0.05, r * 0.66, 0, Math.PI * 2);
+  fillAndOutline(r, t.color);
+  shine(-r * 0.25, -r * 0.22, r * 0.18, r * 0.1);
+  // Leaf veins
+  ctx.strokeStyle = OUTLINE;
+  ctx.lineWidth = Math.max(1.2, r * 0.07);
+  ctx.beginPath();
+  ctx.arc(-r * 0.12, r * 0.05, r * 0.4, -1.1, 1.1);
+  ctx.moveTo(r * 0.38, -r * 0.3);
+  ctx.arc(r * 0.12, r * 0.05, r * 0.42, -0.9, 0.9);
+  ctx.stroke();
+}
+
+function drawEggplant(r, t) {
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.05, r * 0.15, r * 0.58, r * 0.98, 0.35, 0, Math.PI * 2);
+  fillAndOutline(r, t.color);
+  shine(-r * 0.25, r * 0.05, r * 0.11, r * 0.38, 0.35, 0.4);
+  // Leafy cap and stem
+  ctx.beginPath();
+  ctx.ellipse(r * 0.28, -r * 0.68, r * 0.45, r * 0.22, 0.35, 0, Math.PI * 2);
+  fillAndOutline(r, t.leaf);
+  ctx.beginPath();
+  ctx.moveTo(r * 0.38, -r * 0.8);
+  ctx.lineTo(r * 0.5, -r * 1.12);
+  ctx.lineWidth = Math.max(2.5, r * 0.16);
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
+}
+
+function drawPumpkin(r, t) {
+  // Side lobes first, then the middle one on top
+  for (const dx of [-0.45, 0.45, 0]) {
+    ctx.beginPath();
+    ctx.ellipse(dx * r, r * 0.12, r * (dx === 0 ? 0.5 : 0.55), r * 0.78, 0, 0, Math.PI * 2);
+    fillAndOutline(r, t.color);
+  }
+  shine(-r * 0.12, -r * 0.2, r * 0.1, r * 0.25, 0, 0.4);
+  // Curly stem
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.62);
+  ctx.quadraticCurveTo(-r * 0.05, -r * 1.0, r * 0.25, -r * 1.05);
+  ctx.lineWidth = Math.max(3, r * 0.2);
+  ctx.strokeStyle = OUTLINE;
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1.5, r * 0.1);
+  ctx.strokeStyle = t.leaf;
+  ctx.stroke();
+}
+
+// Yellow dashed ring around the vegetable chosen with the keyboard.
+function drawSelection() {
+  if (!keyboardMode || !selectedVeg || screen !== 'playing') return;
+  ctx.save();
+  ctx.strokeStyle = '#ffe066';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([6, 5]);
+  // v2.2 - The ring starts bigger and snaps into place when the selection moves (not in calm mode).
+  const pop = calm ? 1 : 1 + 0.5 * Math.max(0, 1 - selectPopAge / 0.25);
+  ctx.beginPath();
+  ctx.arc(selectedVeg.x, selectedVeg.y, vegRadius() * 1.6 * pop, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// "+1" rises and fades (in calm mode it only fades).
+function drawFloaters() {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const f of floaters) {
+    const life = f.life || 0.9;
+    const t = f.age / life;
+    // Quick ones ("+1") rise and fade. Long messages stay put and fade out at the end.
+    const isMessage = life > 1;
+    const rise = calm || isMessage ? 0 : t * 45 * scale;
+    ctx.globalAlpha = isMessage ? clamp((life - f.age) / 0.6, 0, 1) : 1 - t;
+    let fontSize = Math.round(f.size * Math.max(scale, 0.8));
+    ctx.font = `700 ${fontSize}px ${CANVAS_FONT}`;
+    // v2.3 - Shrink long text so it always fits across the screen (phones).
+    const textWidth = ctx.measureText(f.text).width;
+    if (textWidth > width - 24) {
+      fontSize = Math.floor(fontSize * (width - 24) / textWidth);
+      ctx.font = `700 ${fontSize}px ${CANVAS_FONT}`;
+    }
+    ctx.lineWidth = 6;                    // v3.0 - thick cartoon outline around the text
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = OUTLINE;
+    ctx.strokeText(f.text, f.x, f.y - rise);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x, f.y - rise);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- Caterpillar drawing ---------- */
+
+// v2.7 - Every caterpillar is green: each has its own shade, with soft stripes
+// (every other segment a little lighter) and a slightly lighter head.
+function segmentColor(cat, index) {
+  const stripe = index % 2 === 0 ? GAME.stripeContrast : 0;
+  const head = index === 0 ? 4 : 0;
+  return { h: cat.hue, s: 80, l: 48 + stripe + head };
+}
+function hsla(c, alpha, lightnessShift = 0) {
+  return `hsla(${c.h}, ${c.s}%, ${clamp(c.l + lightnessShift, 0, 100)}%, ${alpha})`;
+}
+
+// Segment size: head a little bigger, getting thinner toward the tail.
+function segmentSize(cat, i) {
+  // v2.2 - CHOMP: the head bulges right after a bite (not in calm mode).
+  if (i === 0) {
+    const chomp = calm ? 0 : 0.3 * Math.max(0, 1 - (cat.chompAge ?? 99) / 0.25);
+    return cat.radius * (1.3 + chomp);   // v3.0 - bigger, cuter head
+  }
+  return cat.radius * (1 - (i / (cat.segments.length - 1)) * GAME.tailTaper);
+}
+
+// Where each segment is drawn, including the side-to-side sway.
+function segmentDrawPositions(cat) {
+  const segs = cat.segments;
+  const wiggle = calm ? 0 : GAME.bodyWiggle * scale;
+  return segs.map((seg, i) => {
+    const angle = i === 0 ? cat.heading : Math.atan2(segs[i - 1].y - seg.y, segs[i - 1].x - seg.x);
+    const sway = Math.sin(cat.phase - i * 0.7) * wiggle;
+    return {
+      x: seg.x + Math.cos(angle + Math.PI / 2) * sway,
+      y: seg.y + Math.sin(angle + Math.PI / 2) * sway,
+      angle,
+      radius: segmentSize(cat, i)
+    };
+  });
+}
+
+function drawCaterpillar(cat) {
+  const parts = segmentDrawPositions(cat);
+  ctx.save();
+  ctx.globalAlpha = cat.under ? GAME.underDim : 1;
+
+  // 1) Glow halos
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    const color = segmentColor(cat, i);
+    const breathe = calm ? 1 : 1 + GAME.glowPulse * Math.sin(elapsed * 2 + i * 0.5);
+    const glowR = p.radius * GAME.glowSize;
+    const g = ctx.createRadialGradient(p.x, p.y, p.radius * 0.5, p.x, p.y, glowR);
+    g.addColorStop(0, hsla(color, GAME.glowStrength * breathe));
+    g.addColorStop(1, hsla(color, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, glowR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // v3.0 - Cartoon outline color: a very dark version of the caterpillar's own green.
+  const outline = `hsl(${cat.hue}, 60%, 14%)`;
+
+  // 2) Stubby legs with round feet that step with the crawl
+  ctx.lineCap = 'round';
+  for (let i = 1; i < parts.length; i++) {
+    const p = parts[i];
+    const step = calm ? 0 : Math.sin(cat.phase + i * 0.9) * 0.4;
+    for (const side of [1, -1]) {
+      const a = p.angle + side * (Math.PI / 2 + step);
+      const fx = p.x + Math.cos(a) * p.radius * 1.3, fy = p.y + Math.sin(a) * p.radius * 1.3;
+      ctx.strokeStyle = outline;
+      ctx.lineWidth = Math.max(2, p.radius * 0.24);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(fx, fy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(fx, fy, Math.max(1.5, p.radius * 0.2), 0, Math.PI * 2);
+      ctx.fillStyle = hsla(segmentColor(cat, i), 1, 15);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.2, p.radius * 0.1);
+      ctx.stroke();
+    }
+  }
+
+  // 3) Round body segments with thick outlines and a glossy shine, tail first so the head is on top
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    const color = segmentColor(cat, i);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fillStyle = hsla(color, 1);
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.6, p.radius * 0.16);
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(p.x - p.radius * 0.32, p.y - p.radius * 0.35, p.radius * 0.32, p.radius * 0.2, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawFace(cat, parts[0], outline);
+  ctx.restore();
+}
+
+// v3.0 - A cartoon face pointing the way the caterpillar is going: antennae with sunny
+// tips, big shiny eyes, rosy cheeks and a smile.
+function drawFace(cat, head, outline) {
+  const r = head.radius;
+  const fx = Math.cos(cat.heading), fy = Math.sin(cat.heading);                              // forward
+  const sx = Math.cos(cat.heading + Math.PI / 2), sy = Math.sin(cat.heading + Math.PI / 2);  // sideways
+  ctx.lineCap = 'round';
+
+  // Antennae
+  for (const side of [1, -1]) {
+    const bx = head.x + fx * r * 0.45 + sx * side * r * 0.45, by = head.y + fy * r * 0.45 + sy * side * r * 0.45;
+    const tx = head.x + fx * r * 1.7 + sx * side * r * 1.0,  ty = head.y + fy * r * 1.7 + sy * side * r * 1.0;
+    ctx.strokeStyle = `hsl(${cat.hue}, 70%, 38%)`;    // green, so they show up on the dark soil
+    ctx.lineWidth = Math.max(2, r * 0.14);
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.quadraticCurveTo(head.x + fx * r * 1.5 + sx * side * r * 0.4, head.y + fy * r * 1.5 + sy * side * r * 0.4, tx, ty);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(tx, ty, r * 0.24, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.fill();
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = Math.max(1.2, r * 0.09);
+    ctx.stroke();
+  }
+
+  // Rosy cheeks
+  ctx.fillStyle = 'rgba(255, 140, 150, 0.7)';
+  for (const side of [1, -1]) {
+    ctx.beginPath();
+    ctx.arc(head.x + fx * r * 0.28 + sx * side * r * 0.64, head.y + fy * r * 0.28 + sy * side * r * 0.64, r * 0.16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Big eyes with a shine
+  for (const side of [1, -1]) {
+    const ex = head.x - fx * r * 0.08 + sx * side * r * 0.38, ey = head.y - fy * r * 0.08 + sy * side * r * 0.38;
+    ctx.beginPath();
+    ctx.arc(ex, ey, r * 0.34, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.2, r * 0.09);
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+    const px = ex + fx * r * 0.12, py = ey + fy * r * 0.12;
+    ctx.fillStyle = '#16200f';
+    ctx.beginPath(); ctx.arc(px, py, r * 0.18, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(px - r * 0.06, py - r * 0.07, r * 0.07, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Smile along the front of the head (opens wider for a moment after a bite)
+  const chomp = calm ? 0 : Math.max(0, 1 - (cat.chompAge ?? 99) / 0.25);
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = Math.max(1.5, r * 0.11);
+  ctx.beginPath();
+  ctx.arc(head.x - fx * r * 0.12, head.y - fy * r * 0.12, r * 0.62, cat.heading - 0.55 - chomp * 0.3, cat.heading + 0.55 + chomp * 0.3);
+  ctx.stroke();
+}
+
+/* =========================================================================
+   MOUSE AND TOUCH — tap or click a vegetable to harvest it.
+   The tap area is a little bigger than the vegetable so it's easy on a phone.
+   ========================================================================= */
+canvas.addEventListener('pointerdown', (e) => {
+  if (screen !== 'playing' || paused) return;
+  const box = canvas.getBoundingClientRect();
+  const x = e.clientX - box.left, y = e.clientY - box.top;
+  keyboardMode = false;
+  const veg = nearestVegetable(x, y, vegRadius() * 1.3 + 14);
+  if (veg) harvest(veg);
+  else {
+    // v2.2 - Tapped bare soil: a small ripple shows the tap was noticed.
+    ring(x, y, 4, 22 * scale, 'rgba(255, 246, 224, 0.6)', 0.35, 2);
+    startLoop();
+  }
+});
+
+/* =========================================================================
+   KEYBOARD
+   Arrows: choose a vegetable in that direction. Enter/Space: harvest it.
+   P: pause. M: next color mode.
+   ========================================================================= */
+function moveSelection(dx, dy) {
+  if (vegetables.length === 0) return;
+  keyboardMode = true;
+  if (!selectedVeg) {
+    // First press: start with the vegetable nearest the middle of the garden.
+    selectedVeg = nearestVegetable(width / 2, gardenTop + gardenHeight / 2);
+  } else {
+    // Find the closest vegetable in the arrow's direction, preferring ones straight ahead.
+    let best = null, bestScore = Infinity;
+    for (const veg of vegetables) {
+      if (veg === selectedVeg) continue;
+      const ox = veg.x - selectedVeg.x, oy = veg.y - selectedVeg.y;
+      const ahead = ox * dx + oy * dy;                 // distance in the arrow's direction
+      if (ahead <= 4) continue;
+      const sideways = Math.abs(ox * dy - oy * dx);     // distance off to the side
+      const s = ahead + sideways * 2;
+      if (s < bestScore) { bestScore = s; best = veg; }
+    }
+    if (best) selectedVeg = best;
+  }
+  selectPopAge = 0;            // v2.2 - the selection ring pops onto the new vegetable
+  startLoop();
+  draw();
+  announce(`${selectedVeg.type.name}, ${isRipe(selectedVeg) ? 'ripe' : 'not ripe yet'}`);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!statsScreen.hidden) return;     // v2.7 - game keys are off while the Stats screen is open
+  const key = e.key.toLowerCase();
+
+  if (key === 'p' && screen === 'playing') { e.preventDefault(); setPaused(!paused); return; }
+  if (screen !== 'playing' || paused) return;
+
+  const arrows = { arrowleft: [-1, 0], arrowright: [1, 0], arrowup: [0, -1], arrowdown: [0, 1] };
+  if (arrows[key]) {
+    e.preventDefault();
+    canvas.focus();
+    moveSelection(...arrows[key]);
+    return;
+  }
+
+  // Enter/Space harvest only when focus is on the garden, so buttons keep their normal Enter/Space.
+  const onGarden = document.activeElement === canvas || document.activeElement === document.body;
+  if ((e.key === 'Enter' || e.key === ' ') && onGarden) {
+    e.preventDefault();
+    if (!selectedVeg) { moveSelection(0, 0); return; }
+    keyboardMode = true;
+    harvest(selectedVeg);
+  }
+});
+
+/* =========================================================================
+   STATS SCREEN (v2.7) — games played and won, best score, current and
+   longest winning streak. Opened from the Stats buttons on the top bar,
+   the title screen and the game-over screen. Opening it during a game pauses.
+   ========================================================================= */
+let statsReturn = null;      // which screen and button to go back to when Stats closes
+
+// Puts the numbers into the Stats screen.
+function fillStats() {
+  document.getElementById('statPlayed').textContent = stats.played;
+  document.getElementById('statWon').textContent = stats.won;
+  document.getElementById('statBest').textContent = highScore;
+  document.getElementById('statStreak').textContent = stats.streak;
+  document.getElementById('statBestStreak').textContent = stats.bestStreak;
+}
+
+function openStats(fromButton) {
+  if (screen === 'playing' && !paused) setPaused(true);
+  // Hide whichever message screen is showing, and remember it so Back can bring it back.
+  const showing = [titleScreen, levelScreen, endScreen].find(o => !o.hidden) || null;
+  statsReturn = { overlay: showing, button: fromButton };
+  if (showing) showing.hidden = true;
+  fillStats();
+  statsScreen.hidden = false;
+  document.getElementById('statsCloseBtn').focus();
+}
+
+function closeStats() {
+  statsScreen.hidden = true;
+  disarmReset();
+  // Refresh the high score shown on the title screen (it may have been reset).
+  document.getElementById('titleBest').textContent = highScore > 0 ? `High score: ${highScore}` : '';
+  if (statsReturn && statsReturn.overlay) statsReturn.overlay.hidden = false;
+  ((statsReturn && statsReturn.button) || canvas).focus();
+}
+
+for (const button of document.querySelectorAll('.stats-open')) {
+  button.addEventListener('click', () => openStats(button));
+}
+document.getElementById('statsCloseBtn').addEventListener('click', closeStats);
+statsScreen.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closeStats(); } });
+
+// Reset takes two presses, so stats can't be wiped by accident.
+let resetArmed = false, resetTimer = null;
+function disarmReset() {
+  resetArmed = false;
+  clearTimeout(resetTimer);
+  statsResetBtn.textContent = 'Reset stats';
+}
+statsResetBtn.addEventListener('click', () => {
+  if (!resetArmed) {
+    resetArmed = true;
+    statsResetBtn.textContent = 'Press again to reset';
+    announce('Press Reset again to erase all stats and the high score.');
+    resetTimer = setTimeout(disarmReset, 4000);    // changes its mind after 4 seconds
+    return;
+  }
+  stats = { played: 0, won: 0, streak: 0, bestStreak: 0 };
+  highScore = 0;
+  saveStats();
+  storageRemove(STORAGE_KEYS.best);
+  disarmReset();
+  fillStats();
+  updateHud();
+  for (const number of statsScreen.querySelectorAll('dd')) pulseClass(number, 'flash-bad');
+  announce('Stats reset.');
+});
+
+/* =========================================================================
+   SOUND BUTTON (v3.3) — turns sound on and off and remembers the choice.
+   ========================================================================= */
+const soundBtn = document.getElementById('soundBtn');
+
+// Makes the button show the current setting (words, speaker picture and color).
+function updateSoundButton() {
+  document.getElementById('soundLabel').textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+  soundBtn.classList.toggle('on', soundOn);
+}
+
+soundBtn.addEventListener('click', () => {
+  soundOn = !soundOn;
+  storageSet(STORAGE_KEYS.sound, soundOn ? 'on' : 'off');
+  updateSoundButton();
+  playSound('soundOn');                       // a "ding-ding" when it's turned on (silent when turned off)
+  announce(soundOn ? 'Sound on' : 'Sound off');
+});
+
+// If sound was left on last time, the browser still needs a click or key press before
+// it allows sound. The first one wakes the sound maker up.
+function wakeSound() { if (soundOn) getAudio(); }
+document.addEventListener('pointerdown', wakeSound, true);
+document.addEventListener('keydown', wakeSound, true);
+
+/* =========================================================================
+   BUTTONS ON THE MESSAGE SCREENS
+   ========================================================================= */
+playBtn.addEventListener('click', newGame);
+continueBtn.addEventListener('click', continueGame);
+nextBtn.addEventListener('click', nextLevel);
+againBtn.addEventListener('click', newGame);
+
+/* =========================================================================
+   FIRST SETUP — fill in the words, load saved things, show the title screen.
+   ========================================================================= */
+document.title = GAME.words.title;
+document.getElementById('barTitle').textContent = GAME.words.title;
+document.getElementById('titleHeading').textContent = GAME.words.title;
+document.getElementById('howToPlay').textContent = GAME.words.howToPlay;
+loadSaved();
+updateSoundButton();      // v3.3 - show the saved sound choice (off unless you turned it on before)
+resizeCanvas();
+
+// v3.0 - Show the moonlit garden scene whenever any message screen (title, level, end, stats) is open.
+const messageScreens = [titleScreen, levelScreen, endScreen, statsScreen];
+function updateScenery() {
+  const noneOpen = messageScreens.every(screenEl => screenEl.hidden);
+  if (scenery.hidden !== noneOpen) scenery.hidden = noneOpen;   // only change it when needed
+}
+// Watch just the four screens (not the scenery itself) for being shown or hidden.
+const screenWatcher = new MutationObserver(updateScenery);
+for (const screenEl of messageScreens) screenWatcher.observe(screenEl, { attributes: true, attributeFilter: ['hidden'] });
+updateScenery();
+
+// v3.0 - Redraw once the cartoon font has loaded, so garden text uses it.
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { soilCanvas = null; draw(); });
+updateHud();
+showTitle();
+</script>
+</body>
+</html>
