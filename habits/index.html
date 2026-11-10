@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Habit Tracker</title>
+<!--
+  ===================================================================
+  HABIT TRACKER
+  A small, private habit tracker that runs entirely in your browser.
+
+  LIBRARIES
+  None. This page uses only plain HTML, CSS, and vanilla JavaScript,
+  so nothing is loaded from any other website.
+
+  PRIVACY
+  No data is ever sent to a server. Your habits are saved only in this
+  browser's localStorage. Export downloads a file straight to your
+  computer; Import reads a file you pick, right here in the page.
+
+  VERSION HISTORY
+  v1.0 - 2026-11-10 - Initial build: add/remove habits, 7-day tick grid
+                      with real toggle buttons, streaks, localStorage
+                      saving, export, checked import with preview,
+                      delete-everything with two confirmations, and a
+                      warning when the browser won't let the page save.
+  ===================================================================
+-->
+<style>
+  /* ---------- Colors and sizes, with a dark-mode version ---------- */
+  :root {
+    --bg: #f6f7f4;
+    --surface: #ffffff;
+    --text: #1e2420;
+    --muted: #59615b;
+    --border: #cfd6d0;
+    --accent: #2f6f4f;
+    --accent-text: #ffffff;
+    --tick-bg: #e3efe7;
+    --today: #2f6f4f;
+    --danger: #a32626;
+    --warning-bg: #fff4d6;
+    --warning-border: #c99a1a;
+    --focus: #1a5fd0;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141816;
+      --surface: #1d2320;
+      --text: #e7ece8;
+      --muted: #a6b0a9;
+      --border: #3a443e;
+      --accent: #6cc196;
+      --accent-text: #0e1a13;
+      --tick-bg: #24382d;
+      --today: #6cc196;
+      --danger: #ff8a8a;
+      --warning-bg: #3a3112;
+      --warning-border: #c99a1a;
+      --focus: #8fb8ff;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .page { max-width: 60rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  h1 { font-size: 1.8rem; margin: 0.5rem 0 0.25rem; }
+  h2 { font-size: 1.2rem; margin: 0 0 0.5rem; }
+  h2:focus { outline: none; }
+  p { margin: 0 0 0.75rem; }
+  .muted { color: var(--muted); }
+
+  section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-top: 1rem;
+  }
+
+  /* Text only screen readers can hear */
+  .visually-hidden {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; border: 0; padding: 0; margin: -1px;
+  }
+
+  /* "Skip to the grid" link appears when it gets keyboard focus */
+  .skip-link {
+    position: absolute; left: 1rem; top: -4rem;
+    background: var(--accent); color: var(--accent-text);
+    padding: 0.5rem 1rem; border-radius: var(--radius); z-index: 10;
+  }
+  .skip-link:focus { top: 1rem; }
+
+  /* Clear focus ring for keyboard users */
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Buttons and inputs ---------- */
+  button, input { font: inherit; }
+  button {
+    min-height: 44px;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
+  button.danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+  button.danger.solid { background: var(--danger); color: var(--surface); }
+
+  input[type="text"] {
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--muted);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--text);
+    flex: 1 1 12rem;
+    min-width: 0;
+  }
+  input[aria-invalid="true"] { border-color: var(--danger); border-width: 2px; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .error { color: var(--danger); min-height: 1.5em; margin: 0.4rem 0 0; }
+
+  /* ---------- Storage warning banner ---------- */
+  .warning {
+    background: var(--warning-bg);
+    border: 2px solid var(--warning-border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+  }
+
+  /* ---------- The habit grid ---------- */
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { padding: 0.35rem; text-align: center; border-bottom: 1px solid var(--border); }
+  thead th { font-size: 0.85rem; font-weight: 600; vertical-align: bottom; }
+  thead th .dow { display: block; }
+  thead th .dnum { display: block; color: var(--muted); font-weight: 400; white-space: nowrap; }
+  thead th.today .dow,
+  thead th.today .dnum { color: var(--today); font-weight: 700; }
+  thead th.today .today-word { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* The habit name column stays put while the days scroll on phones */
+  th.habit-name {
+    text-align: left;
+    position: sticky; left: 0;
+    background: var(--surface);
+    min-width: 7rem; max-width: 12rem;
+    font-weight: 600;
+    word-break: break-word;
+    z-index: 1;
+  }
+
+  /* One tick button per habit per day */
+  button.tick {
+    width: 44px; height: 44px;
+    padding: 0;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    color: var(--accent);
+    font-size: 1.4rem; line-height: 1;
+  }
+  button.tick .mark { visibility: hidden; }
+  button.tick[aria-pressed="true"] { background: var(--tick-bg); border-color: var(--accent); }
+  button.tick[aria-pressed="true"] .mark { visibility: visible; }
+  td.today-cell button.tick { border-style: dashed; }
+  td.today-cell button.tick[aria-pressed="true"] { border-style: solid; }
+
+  td.streak { white-space: nowrap; min-width: 5.5rem; }
+  .streak-num { font-weight: 700; font-size: 1.15rem; }
+  .streak-note { display: block; font-size: 0.75rem; color: var(--muted); }
+
+  button.remove { min-width: 44px; padding: 0.25rem 0.6rem; }
+
+  .empty { padding: 1rem 0 0; }
+
+  .data-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+  /* ---------- Pop-up dialog ---------- */
+  dialog {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    padding: 1.25rem;
+    width: min(32rem, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  .dialog-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+  #dialog-details ul { padding-left: 1.25rem; margin: 0.25rem 0 0.75rem; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#grid-heading">Skip to the habit grid</a>
+
+<div class="page">
+  <header>
+    <h1>Habit Tracker</h1>
+    <p class="muted">Tick each habit on the days you do it. Everything stays in this browser.</p>
+  </header>
+
+  <!-- Shown only if the browser refuses to let the page save -->
+  <div id="storage-warning" class="warning" role="alert" hidden></div>
+
+  <main>
+    <!-- Adding a new habit -->
+    <section aria-labelledby="add-heading">
+      <h2 id="add-heading">Add a habit</h2>
+      <form id="add-form" novalidate>
+        <label for="new-habit">Habit name</label>
+        <div class="row">
+          <input type="text" id="new-habit" maxlength="60" autocomplete="off" aria-describedby="add-error">
+          <button type="submit">Add habit</button>
+        </div>
+        <p id="add-error" class="error" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- The seven-day grid -->
+    <section aria-labelledby="grid-heading">
+      <h2 id="grid-heading" tabindex="-1">Last seven days</h2>
+      <p class="muted">A check mark means done. Arrow keys move between tick buttons. A streak counts the days in a row up to today; it stays alive until midnight even if today isn't ticked yet.</p>
+      <div class="table-wrap" id="table-wrap" role="region" aria-labelledby="grid-heading" tabindex="0">
+        <table id="grid">
+          <caption class="visually-hidden">Habits for the last seven days, with streaks</caption>
+          <thead id="grid-head"></thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+      </div>
+      <div id="empty-message" class="empty" hidden>
+        <p>No habits yet. Add one above, or bring back the starter habits.</p>
+        <button type="button" id="restore-starters" class="secondary">Add the starter habits</button>
+      </div>
+    </section>
+
+    <!-- Export, import, delete -->
+    <section aria-labelledby="data-heading">
+      <h2 id="data-heading">Your data</h2>
+      <p class="muted">Your data lives only in this browser. Export a copy to keep it safe or move it to another device.</p>
+      <div class="data-buttons">
+        <button type="button" id="export-btn">Export my data</button>
+        <button type="button" id="import-btn" class="secondary">Import a file</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+        <button type="button" id="delete-btn" class="danger">Delete everything</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Invisible area that reads short updates aloud to screen readers -->
+<div id="announcer" class="visually-hidden" role="status" aria-live="polite"></div>
+
+<!-- One reusable pop-up for questions and messages -->
+<dialog id="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-message">
+  <form method="dialog">
+    <h2 id="dialog-title"></h2>
+    <p id="dialog-message"></p>
+    <div id="dialog-details"></div>
+    <div class="dialog-buttons">
+      <button type="submit" value="cancel" id="dialog-cancel" class="secondary">Cancel</button>
+      <button type="submit" value="confirm" id="dialog-confirm">OK</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+// v1.0 - initial build
+
+/* =====================================================================
+   EDITABLE SETTINGS - change these to customize the tracker.
+   ===================================================================== */
+const SETTINGS = {
+  // The habits a brand-new visitor starts with
+  startingHabits: [
+    "Stretch in the morning",
+    "Drink water",
+    "Walk for 30 minutes"
+  ],
+  daysShown: 7,                       // how many days the grid shows
+  maxHabitNameLength: 60,             // longest habit name allowed
+  maxHabits: 100,                     // most habits allowed in the list
+  maxTicksPerHabit: 20000,            // safety limit when importing
+  maxImportFileBytes: 1000000,        // biggest import file allowed (about 1 MB)
+  storageKey: "habitTracker.v1",      // the name the data is saved under
+  exportFilePrefix: "habit-tracker"   // start of the downloaded file's name
+};
+
+/* =====================================================================
+   FINDING THE PAGE PARTS WE NEED
+   We grab each element once here so the rest of the code can use them.
+   ===================================================================== */
+const addForm = document.getElementById("add-form");
+const newHabitInput = document.getElementById("new-habit");
+const addError = document.getElementById("add-error");
+const gridHeading = document.getElementById("grid-heading");
+const tableWrap = document.getElementById("table-wrap");
+const gridHead = document.getElementById("grid-head");
+const gridBody = document.getElementById("grid-body");
+const emptyMessage = document.getElementById("empty-message");
+const restoreStartersBtn = document.getElementById("restore-starters");
+const exportBtn = document.getElementById("export-btn");
+const importBtn = document.getElementById("import-btn");
+const importFile = document.getElementById("import-file");
+const deleteBtn = document.getElementById("delete-btn");
+const storageWarning = document.getElementById("storage-warning");
+const announcer = document.getElementById("announcer");
+const dialog = document.getElementById("dialog");
+const dialogTitle = document.getElementById("dialog-title");
+const dialogMessage = document.getElementById("dialog-message");
+const dialogDetails = document.getElementById("dialog-details");
+const dialogCancel = document.getElementById("dialog-cancel");
+const dialogConfirm = document.getElementById("dialog-confirm");
+
+/* =====================================================================
+   THE APP'S MEMORY
+   "habits" is the list the page works with. Each habit looks like:
+     { id: "abc123", name: "Drink water", done: Set of "YYYY-MM-DD" days }
+   A Set is a list with no repeats, which makes "is this day ticked?" fast.
+   "lastRenderedDay" remembers which day the grid was drawn for, so we
+   can redraw it when the date changes at midnight.
+   ===================================================================== */
+let habits = [];
+let lastRenderedDay = "";
+
+/* =====================================================================
+   DATE HELPERS
+   Dates are stored as simple text like "2026-11-10", using your own
+   local time zone (not UTC), so "today" always means your today.
+   ===================================================================== */
+
+// Turn a Date into "YYYY-MM-DD" using local time.
+function toDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Get a Date for "n days ago". We set the time to noon so that
+// daylight-saving changes can never push us into the wrong day.
+function daysAgo(n) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - n);
+  return date;
+}
+
+// Today's date key, e.g. "2026-11-10".
+function todayKey() {
+  return toDateKey(new Date());
+}
+
+// Check that a piece of text is a real calendar date in "YYYY-MM-DD" form.
+// (This rejects things like "2026-02-31" or "hello".)
+function isValidDateKey(text) {
+  if (typeof text !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(year, month - 1, day, 12);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+}
+
+/* =====================================================================
+   SMALL HELPERS
+   ===================================================================== */
+
+// Make a unique id for each habit (used only inside the page).
+function makeId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return "h" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// Tidy a habit name: trim the ends and squash repeated spaces.
+function tidyName(text) {
+  return String(text).trim().replace(/\s+/g, " ");
+}
+
+// Build a fresh habit list from the starter names in SETTINGS.
+function makeStarterHabits() {
+  return SETTINGS.startingHabits.map(name => ({ id: makeId(), name: tidyName(name), done: new Set() }));
+}
+
+// Say something quietly to screen reader users.
+function announce(message) {
+  announcer.textContent = "";
+  // A tiny delay makes screen readers notice repeated messages too.
+  setTimeout(() => { announcer.textContent = message; }, 50);
+}
+
+// Find a habit by its id.
+function findHabit(id) {
+  return habits.find(habit => habit.id === id);
+}
+
+/* =====================================================================
+   CHECKING AND CLEANING DATA
+   This one function checks data from two places: what was saved in
+   localStorage, and any file someone imports. It never trusts the data.
+   It keeps only habits with sensible names and real dates, skips
+   anything odd, and counts how many things it skipped.
+   It returns either { ok: true, habits, skipped } or { ok: false, reason }.
+   ===================================================================== */
+function checkData(raw) {
+  // The data must be an object (curly braces), not a list or plain text.
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, reason: "This doesn't look like habit tracker data. It should be an object with a list called \"habits\"." };
+  }
+  // If the file says it belongs to a different app, refuse it.
+  if (raw.app !== undefined && raw.app !== "habit-tracker") {
+    return { ok: false, reason: "This file seems to belong to a different app, not the habit tracker." };
+  }
+  // There must be a list of habits.
+  if (!Array.isArray(raw.habits)) {
+    return { ok: false, reason: "This file has no list of habits in it." };
+  }
+  if (raw.habits.length > SETTINGS.maxHabits) {
+    return { ok: false, reason: `This file has ${raw.habits.length} habits. The most allowed is ${SETTINGS.maxHabits}.` };
+  }
+
+  const cleanHabits = [];
+  const namesSeen = new Set();
+  const today = todayKey();
+  let skipped = 0;
+
+  for (const item of raw.habits) {
+    // Each habit must be an object with a usable name.
+    if (!item || typeof item !== "object" || typeof item.name !== "string") { skipped++; continue; }
+    const name = tidyName(item.name);
+    if (!name || name.length > SETTINGS.maxHabitNameLength) { skipped++; continue; }
+
+    // Skip a second habit with the same name (ignoring capital letters).
+    if (namesSeen.has(name.toLowerCase())) { skipped++; continue; }
+    namesSeen.add(name.toLowerCase());
+
+    // Keep only real dates that are not in the future.
+    const done = new Set();
+    if (Array.isArray(item.done)) {
+      if (item.done.length > SETTINGS.maxTicksPerHabit) {
+        skipped += item.done.length - SETTINGS.maxTicksPerHabit;
+      }
+      for (const day of item.done.slice(0, SETTINGS.maxTicksPerHabit)) {
+        if (isValidDateKey(day) && day <= today) {
+          done.add(day);
+        } else {
+          skipped++;
+        }
+      }
+    }
+    cleanHabits.push({ id: makeId(), name, done });
+  }
+
+  return { ok: true, habits: cleanHabits, skipped };
+}
+
+/* =====================================================================
+   TURNING THE APP'S MEMORY INTO PLAIN JSON
+   Sets can't be written as JSON, so each habit's ticked days are turned
+   into a sorted list. This is the exact shape that gets saved and
+   exported, so an exported file is easy to read in any text editor.
+   ===================================================================== */
+function toPlainData() {
+  return {
+    app: "habit-tracker",
+    formatVersion: 1,
+    savedAt: new Date().toISOString(),
+    habits: habits.map(habit => ({
+      name: habit.name,
+      done: Array.from(habit.done).sort()
+    }))
+  };
+}
+
+/* =====================================================================
+   SAVING AND LOADING (localStorage)
+   Some browsers block saving (private mode, storage turned off, or the
+   storage is full). When that happens we show a warning and keep going:
+   the page still works, it just can't remember things after closing.
+   ===================================================================== */
+
+// Show the yellow warning banner with a message.
+function showStorageWarning(extra) {
+  storageWarning.textContent =
+    "Heads up: this browser isn't letting the page save. " +
+    (extra ? extra + " " : "") +
+    "Everything still works, but your ticks will be lost when you close this page. " +
+    "Use \u201CExport my data\u201D to keep a copy.";
+  storageWarning.hidden = false;
+}
+
+// Save the current habits. Returns true if it worked.
+function saveData() {
+  try {
+    localStorage.setItem(SETTINGS.storageKey, JSON.stringify(toPlainData()));
+    return true;
+  } catch (error) {
+    showStorageWarning(error && error.name === "QuotaExceededError" ? "The browser's storage is full." : "");
+    return false;
+  }
+}
+
+// Load habits when the page opens.
+function loadData() {
+  let savedText = null;
+
+  // Step 1: try to read what was saved. Reading itself can fail if storage is blocked.
+  try {
+    savedText = localStorage.getItem(SETTINGS.storageKey);
+  } catch (error) {
+    showStorageWarning("");
+    return makeStarterHabits();
+  }
+
+  // Step 2: nothing saved yet means this is a first visit, so use the starter habits.
+  if (savedText === null) {
+    return makeStarterHabits();
+  }
+
+  // Step 3: check the saved data carefully before using it.
+  try {
+    const result = checkData(JSON.parse(savedText));
+    if (result.ok) return result.habits;
+  } catch (error) {
+    // The saved text wasn't valid JSON - handled just below.
+  }
+
+  // Step 4: the saved data is damaged. Keep a backup copy of it (just in case)
+  // and start fresh, telling the person what happened.
+  try { localStorage.setItem(SETTINGS.storageKey + ".damaged-backup", savedText); } catch (error) { /* ignore */ }
+  storageWarning.textContent = "Your saved data couldn't be read, so the tracker started fresh. A backup of the old data was kept in this browser.";
+  storageWarning.hidden = false;
+  return makeStarterHabits();
+}
+
+/* =====================================================================
+   STREAKS
+   A streak is the number of days in a row the habit was ticked, ending
+   today. If today isn't ticked yet, we start counting from yesterday,
+   because the streak is still alive until midnight.
+   Returns { count, waitingOnToday }.
+   ===================================================================== */
+function getStreak(habit) {
+  const cursor = daysAgo(0);
+  let waitingOnToday = false;
+
+  // Today not ticked yet? Start from yesterday instead.
+  if (!habit.done.has(toDateKey(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+    waitingOnToday = true;
+  }
+
+  // Walk backwards one day at a time while each day is ticked.
+  let count = 0;
+  while (habit.done.has(toDateKey(cursor))) {
+    count++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  // Only say "tick today" if there is actually a streak to keep going.
+  return { count, waitingOnToday: waitingOnToday && count > 0 };
+}
+
+// Fill a table cell with the streak number and a short note.
+function fillStreakCell(cell, habit) {
+  const streak = getStreak(habit);
+  const unit = streak.count === 1 ? "day" : "days";
+  cell.replaceChildren();
+
+  const num = document.createElement("span");
+  num.className = "streak-num";
+  num.textContent = streak.count;
+  cell.append(num, " " + unit);
+
+  if (streak.waitingOnToday) {
+    const note = document.createElement("span");
+    note.className = "streak-note";
+    note.textContent = "tick today to keep it";
+    cell.append(note);
+  }
+}
+
+/* =====================================================================
+   DRAWING THE GRID
+   Rebuilds the whole table: one header row of days, then one row per
+   habit with a tick button for each day, the streak, and a remove button.
+   All text is added with textContent, so habit names can never be
+   treated as code.
+   ===================================================================== */
+
+// Build the list of days to show, oldest first, ending with today.
+function getShownDays() {
+  const days = [];
+  for (let i = SETTINGS.daysShown - 1; i >= 0; i--) {
+    const date = daysAgo(i);
+    days.push({
+      key: toDateKey(date),
+      isToday: i === 0,
+      weekday: date.toLocaleDateString(undefined, { weekday: "short" }),
+      shortDate: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      longDate: date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
+    });
+  }
+  return days;
+}
+
+function renderGrid() {
+  const days = getShownDays();
+  lastRenderedDay = todayKey();
+
+  // --- Header row: "Habit", each day, "Streak", "Remove" ---
+  const headRow = document.createElement("tr");
+
+  const habitHeader = document.createElement("th");
+  habitHeader.scope = "col";
+  habitHeader.className = "habit-name";
+  habitHeader.textContent = "Habit";
+  headRow.append(habitHeader);
+
+  for (const day of days) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    if (day.isToday) th.className = "today";
+
+    // A spoken label for the whole column, e.g. "Today, Tuesday, November 10"
+    const spoken = document.createElement("span");
+    spoken.className = "visually-hidden";
+    spoken.textContent = (day.isToday ? "Today, " : "") + day.longDate;
+
+    // The short visible label, e.g. "Tue / Nov 10"
+    const visible = document.createElement("span");
+    visible.setAttribute("aria-hidden", "true");
+    if (day.isToday) {
+      const word = document.createElement("span");
+      word.className = "today-word";
+      word.textContent = "Today";
+      visible.append(word);
+    }
+    const dow = document.createElement("span");
+    dow.className = "dow";
+    dow.textContent = day.weekday;
+    const dnum = document.createElement("span");
+    dnum.className = "dnum";
+    dnum.textContent = day.shortDate;
+    visible.append(dow, dnum);
+
+    th.append(spoken, visible);
+    headRow.append(th);
+  }
+
+  const streakHeader = document.createElement("th");
+  streakHeader.scope = "col";
+  streakHeader.textContent = "Streak";
+  headRow.append(streakHeader);
+
+  const removeHeader = document.createElement("th");
+  removeHeader.scope = "col";
+  const removeHeaderText = document.createElement("span");
+  removeHeaderText.className = "visually-hidden";
+  removeHeaderText.textContent = "Remove";
+  removeHeader.append(removeHeaderText);
+  headRow.append(removeHeader);
+
+  gridHead.replaceChildren(headRow);
+
+  // --- One row per habit ---
+  const rows = habits.map(habit => {
+    const tr = document.createElement("tr");
+    tr.dataset.habit = habit.id;
+
+    // Habit name (a row header, so screen readers repeat it in each cell)
+    const nameCell = document.createElement("th");
+    nameCell.scope = "row";
+    nameCell.className = "habit-name";
+    nameCell.textContent = habit.name;
+    tr.append(nameCell);
+
+    // One real toggle button per day
+    for (const day of days) {
+      const td = document.createElement("td");
+      if (day.isToday) td.className = "today-cell";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "tick";
+      button.dataset.habit = habit.id;
+      button.dataset.day = day.key;
+      // aria-pressed tells screen readers "pressed" or "not pressed"
+      button.setAttribute("aria-pressed", String(habit.done.has(day.key)));
+      button.setAttribute("aria-label", `${habit.name}, ${day.isToday ? "today, " : ""}${day.longDate}`);
+
+      // The visible check mark (shown by CSS only when pressed)
+      const mark = document.createElement("span");
+      mark.className = "mark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = "\u2713";
+      button.append(mark);
+
+      td.append(button);
+      tr.append(td);
+    }
+
+    // Streak
+    const streakCell = document.createElement("td");
+    streakCell.className = "streak";
+    fillStreakCell(streakCell, habit);
+    tr.append(streakCell);
+
+    // Remove button
+    const removeCell = document.createElement("td");
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "remove danger";
+    removeButton.dataset.remove = habit.id;
+    removeButton.setAttribute("aria-label", `Remove ${habit.name}`);
+    removeButton.textContent = "\u2715";
+    removeCell.append(removeButton);
+    tr.append(removeCell);
+
+    return tr;
+  });
+
+  gridBody.replaceChildren(...rows);
+
+  // Show the table, or the "no habits yet" message if the list is empty.
+  const isEmpty = habits.length === 0;
+  tableWrap.hidden = isEmpty;
+  emptyMessage.hidden = !isEmpty;
+}
+
+/* =====================================================================
+   TICKING A DAY
+   Clicking (or pressing Enter/Space on) a tick button flips that day.
+   We update just that button and its streak, instead of redrawing the
+   whole table, so keyboard focus stays exactly where it was.
+   ===================================================================== */
+function toggleTick(button) {
+  const habit = findHabit(button.dataset.habit);
+  if (!habit) return;
+  const day = button.dataset.day;
+
+  if (habit.done.has(day)) {
+    habit.done.delete(day);
+  } else {
+    habit.done.add(day);
+  }
+
+  button.setAttribute("aria-pressed", String(habit.done.has(day)));
+
+  const streakCell = button.closest("tr").querySelector("td.streak");
+  fillStreakCell(streakCell, habit);
+
+  saveData();
+
+  const streak = getStreak(habit);
+  announce(`${habit.name} streak: ${streak.count} ${streak.count === 1 ? "day" : "days"}.`);
+}
+
+// One listener on the table body handles every tick and remove button.
+gridBody.addEventListener("click", event => {
+  const tickButton = event.target.closest("button.tick");
+  if (tickButton) { toggleTick(tickButton); return; }
+
+  const removeButton = event.target.closest("button[data-remove]");
+  if (removeButton) removeHabit(removeButton.dataset.remove);
+});
+
+// Arrow keys move between tick buttons, like moving around a spreadsheet.
+// (Tab still works too; this is just a shortcut.)
+gridBody.addEventListener("keydown", event => {
+  const button = event.target.closest("button.tick");
+  if (!button) return;
+
+  const moves = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] };
+  const move = moves[event.key];
+  if (!move) return;
+
+  const rows = Array.from(gridBody.querySelectorAll("tr"));
+  const rowIndex = rows.indexOf(button.closest("tr"));
+  const colIndex = Array.from(rows[rowIndex].querySelectorAll("button.tick")).indexOf(button);
+  const targetRow = rows[rowIndex + move[0]];
+  const target = targetRow ? targetRow.querySelectorAll("button.tick")[colIndex + move[1]] : null;
+
+  if (target) {
+    event.preventDefault();
+    target.focus();
+  }
+});
+
+/* =====================================================================
+   ADDING A HABIT
+   Checks the name (not empty, not a repeat, not too many habits), then
+   adds it, saves, redraws, and leaves the cursor in the box for the next one.
+   ===================================================================== */
+function showAddError(message) {
+  addError.textContent = message;
+  newHabitInput.setAttribute("aria-invalid", message ? "true" : "false");
+}
+
+addForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const name = tidyName(newHabitInput.value);
+
+  if (!name) {
+    showAddError("Please type a habit name.");
+    newHabitInput.focus();
+    return;
+  }
+  if (name.length > SETTINGS.maxHabitNameLength) {
+    showAddError(`Please keep the name under ${SETTINGS.maxHabitNameLength} characters.`);
+    return;
+  }
+  if (habits.some(habit => habit.name.toLowerCase() === name.toLowerCase())) {
+    showAddError(`You already have a habit called \u201C${name}\u201D.`);
+    newHabitInput.focus();
+    return;
+  }
+  if (habits.length >= SETTINGS.maxHabits) {
+    showAddError(`You can track up to ${SETTINGS.maxHabits} habits.`);
+    return;
+  }
+
+  habits.push({ id: makeId(), name, done: new Set() });
+  saveData();
+  renderGrid();
+  showAddError("");
+  newHabitInput.value = "";
+  newHabitInput.focus();
+  announce(`Added ${name}.`);
+});
+
+// Clear the error message as soon as the person starts typing again.
+newHabitInput.addEventListener("input", () => {
+  if (addError.textContent) showAddError("");
+});
+
+/* =====================================================================
+   REMOVING A HABIT
+   Asks first, because the habit's ticks are deleted with it.
+   ===================================================================== */
+async function removeHabit(id) {
+  const habit = findHabit(id);
+  if (!habit) return;
+
+  const yes = await showDialog({
+    title: "Remove this habit?",
+    message: `\u201C${habit.name}\u201D and all of its ticks will be deleted.`,
+    confirmLabel: "Remove habit",
+    danger: true
+  });
+  if (!yes) return;
+
+  habits = habits.filter(item => item.id !== id);
+  saveData();
+  renderGrid();
+  // The removed row's button is gone, so move focus somewhere sensible.
+  gridHeading.focus();
+  announce(`Removed ${habit.name}.`);
+}
+
+// Bring the starter habits back when the list is empty.
+restoreStartersBtn.addEventListener("click", () => {
+  habits = makeStarterHabits();
+  saveData();
+  renderGrid();
+  gridHeading.focus();
+  announce("Starter habits added.");
+});
+
+/* =====================================================================
+   THE POP-UP DIALOG
+   showDialog() opens the pop-up and waits for an answer. It gives back
+   true if the person pressed the main button, false if they cancelled
+   (Cancel button or the Escape key). Focus starts on the safe choice
+   and goes back to where it was afterwards.
+   Pass cancelLabel: null for a simple message with just an OK button.
+   ===================================================================== */
+function showDialog({ title, message, details = null, confirmLabel = "OK", cancelLabel = "Cancel", danger = false }) {
+  return new Promise(resolve => {
+    // Very old browsers without <dialog>: fall back to the built-in boxes.
+    if (typeof dialog.showModal !== "function") {
+      const text = title + "\n\n" + message + (details ? "\n\n" + details.textContent : "");
+      if (cancelLabel) {
+        resolve(window.confirm(text));
+      } else {
+        window.alert(text);
+        resolve(true);
+      }
+      return;
+    }
+
+    dialogTitle.textContent = title;
+    dialogMessage.textContent = message;
+    dialogDetails.replaceChildren();
+    if (details) dialogDetails.append(details);
+
+    dialogConfirm.textContent = confirmLabel;
+    dialogConfirm.className = danger ? "danger solid" : "";
+    dialogCancel.hidden = !cancelLabel;
+    if (cancelLabel) dialogCancel.textContent = cancelLabel;
+
+    const opener = document.activeElement;
+    dialog.returnValue = "";
+
+    dialog.addEventListener("close", () => {
+      resolve(dialog.returnValue === "confirm");
+      if (opener && document.contains(opener) && typeof opener.focus === "function") opener.focus();
+    }, { once: true });
+
+    dialog.showModal();
+    // Start on the safe choice: Cancel when there is one.
+    (cancelLabel ? dialogCancel : dialogConfirm).focus();
+  });
+}
+
+/* =====================================================================
+   EXPORT MY DATA
+   Builds a nicely indented JSON file and downloads it. Nothing is
+   uploaded anywhere; the browser creates the file on your device.
+   ===================================================================== */
+exportBtn.addEventListener("click", () => {
+  const data = toPlainData();
+  data.exportedAt = data.savedAt;
+  delete data.savedAt;
+
+  const text = JSON.stringify(data, null, 2);
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const fileName = `${SETTINGS.exportFilePrefix}-${todayKey()}.json`;
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  announce(`Your data was downloaded as ${fileName}.`);
+});
+
+/* =====================================================================
+   IMPORT A FILE
+   1. Open the file picker.
+   2. Check the file size, then read it and make sure it is valid JSON.
+   3. Check every habit and date carefully (see checkData above).
+   4. Show what's in the file and ask before replacing anything.
+   ===================================================================== */
+importBtn.addEventListener("click", () => {
+  importFile.value = "";   // lets the same file be picked twice in a row
+  importFile.click();
+});
+
+importFile.addEventListener("change", async () => {
+  const file = importFile.files && importFile.files[0];
+  if (!file) return;
+
+  // Step 2a: refuse files that are far too big to be habit data.
+  if (file.size > SETTINGS.maxImportFileBytes) {
+    await showDialog({
+      title: "That file is too big",
+      message: "Habit tracker files are small. This one is over 1 MB, so it probably isn't the right file. Nothing was changed.",
+      cancelLabel: null
+    });
+    importBtn.focus();
+    return;
+  }
+
+  // Step 2b: read the file and turn the text into data.
+  let raw;
+  try {
+    raw = JSON.parse(await file.text());
+  } catch (error) {
+    await showDialog({
+      title: "Couldn't read that file",
+      message: `\u201C${file.name}\u201D isn't a valid JSON file. Nothing was changed.`,
+      cancelLabel: null
+    });
+    importBtn.focus();
+    return;
+  }
+
+  // Step 3: check everything inside.
+  const result = checkData(raw);
+  if (!result.ok) {
+    await showDialog({
+      title: "That file can't be imported",
+      message: result.reason + " Nothing was changed.",
+      cancelLabel: null
+    });
+    importBtn.focus();
+    return;
+  }
+
+  // Step 4: build a preview of what's in the file.
+  const details = document.createElement("div");
+  if (result.habits.length === 0) {
+    const p = document.createElement("p");
+    p.textContent = "This file has no habits. Importing it will leave your list empty.";
+    details.append(p);
+  } else {
+    const intro = document.createElement("p");
+    intro.textContent = `The file has ${result.habits.length} ${result.habits.length === 1 ? "habit" : "habits"}:`;
+    const list = document.createElement("ul");
+    for (const habit of result.habits) {
+      const days = Array.from(habit.done).sort();
+      const li = document.createElement("li");
+      li.textContent = `${habit.name} \u2014 ${days.length} ${days.length === 1 ? "day" : "days"} ticked` +
+        (days.length ? `, most recent ${days[days.length - 1]}` : "");
+      list.append(li);
+    }
+    details.append(intro, list);
+  }
+  if (result.skipped > 0) {
+    const note = document.createElement("p");
+    note.textContent = `${result.skipped} ${result.skipped === 1 ? "entry was" : "entries were"} skipped because ${result.skipped === 1 ? "it was" : "they were"} damaged, repeated, or dated in the future.`;
+    details.append(note);
+  }
+
+  const yes = await showDialog({
+    title: "Replace your data with this file?",
+    message: `Your current ${habits.length} ${habits.length === 1 ? "habit" : "habits"} and all ticks will be replaced. Tip: export your current data first if you might want it back.`,
+    details,
+    confirmLabel: "Replace my data",
+    danger: true
+  });
+
+  if (!yes) {
+    importBtn.focus();
+    announce("Import cancelled. Nothing was changed.");
+    return;
+  }
+
+  habits = result.habits;
+  saveData();
+  renderGrid();
+  gridHeading.focus();
+  announce(`Imported ${habits.length} ${habits.length === 1 ? "habit" : "habits"}.`);
+});
+
+/* =====================================================================
+   DELETE EVERYTHING
+   Asks twice, because this cannot be undone. Afterwards the list is
+   empty (and stays empty after reloading) until you add habits again.
+   ===================================================================== */
+deleteBtn.addEventListener("click", async () => {
+  const first = await showDialog({
+    title: "Delete everything?",
+    message: "This removes all your habits and every tick from this browser.",
+    confirmLabel: "Yes, delete",
+    danger: true
+  });
+  if (!first) return;
+
+  const second = await showDialog({
+    title: "Are you completely sure?",
+    message: "This cannot be undone. If you might want your data later, cancel and use \u201CExport my data\u201D first.",
+    confirmLabel: "Delete everything forever",
+    danger: true
+  });
+  if (!second) return;
+
+  habits = [];
+  saveData();
+  try { localStorage.removeItem(SETTINGS.storageKey + ".damaged-backup"); } catch (error) { /* ignore */ }
+  renderGrid();
+  gridHeading.focus();
+  announce("Everything was deleted.");
+});
+
+/* =====================================================================
+   KEEPING "TODAY" CORRECT
+   At midnight the grid shifts by a day and streaks are recounted.
+   We set a timer for just after midnight, and also check whenever the
+   page becomes visible again (timers can pause while a phone sleeps).
+   ===================================================================== */
+function scheduleMidnightRefresh() {
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+  setTimeout(() => {
+    renderGrid();
+    scheduleMidnightRefresh();
+  }, nextMidnight - now);
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && todayKey() !== lastRenderedDay) {
+    renderGrid();
+  }
+});
+
+/* =====================================================================
+   START THE APP
+   Load saved habits (or the starters), draw the grid, save once so a
+   first visit is remembered, and start watching for midnight.
+   ===================================================================== */
+habits = loadData();
+renderGrid();
+if (storageWarning.hidden) saveData();
+scheduleMidnightRefresh();
+</script>
+</body>
+</html>
