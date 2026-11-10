@@ -1,0 +1,540 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Holy Grail Quiz</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  ============================================================
+  HOLY GRAIL QUIZ
+  A five-question multiple-choice quiz about
+  Monty Python and the Holy Grail (1975).
+
+  LIBRARIES
+  - None. This page uses only plain HTML, CSS, and vanilla JavaScript.
+
+  FONTS (stylesheet only, not code)
+  - Pirata One (blackletter headings) - Google Fonts - fonts.googleapis.com
+  - Alegreya Sans (body text)         - Google Fonts - fonts.googleapis.com
+
+  PRIVACY
+  - Nothing is sent to any server. Your answers and score stay in this
+    browser tab and disappear when you close or reload it.
+
+  KEYBOARD
+  - Tab / Shift+Tab move between buttons.
+  - Press A, B, C or D (or 1-4) to pick an answer.
+  - Enter or Space presses the focused button.
+  - After answering, focus jumps to the "Next question" button.
+
+  VERSION HISTORY
+  v1.0 - 2026-11-09 - initial build: one question at a time, right/wrong
+                      feedback with the correct answer shown, final score,
+                      Play again, full keyboard support, answer order
+                      shuffled on each play.
+  ============================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700&family=Pirata+One&display=swap">
+<style>
+  /* Layout: one centered "heraldic shield" card holding the quiz, a banner title above it. */
+  :root {
+    --bg: #e9edf5;          /* pale steel blue page */
+    --card: #ffffff;
+    --ink: #1b2340;         /* deep heraldic navy text */
+    --muted: #55607e;
+    --royal: #23408e;       /* royal blue accent */
+    --gold: #c9971c;        /* heraldic gold */
+    --red: #b3262e;         /* heraldic red, also "wrong" */
+    --green: #1f7a4a;       /* "right" */
+    --line: #c8cfe0;
+    --option-bg: #f4f6fb;
+    --right-bg: #e3f3ea;
+    --wrong-bg: #f9e4e5;
+    --font-display: "Pirata One", "UnifrakturCook", "Old English Text MT", Georgia, serif;
+    --font-body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #10152a; --card: #1a2140; --ink: #eef1fa; --muted: #a8b1cc;
+      --royal: #8fa8ec; --gold: #e3b648; --red: #f07a80; --green: #6fd19c;
+      --line: #313b63; --option-bg: #222a4d; --right-bg: #173a2c; --wrong-bg: #45202a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #10152a; --card: #1a2140; --ink: #eef1fa; --muted: #a8b1cc;
+    --royal: #8fa8ec; --gold: #e3b648; --red: #f07a80; --green: #6fd19c;
+    --line: #313b63; --option-bg: #222a4d; --right-bg: #173a2c; --wrong-bg: #45202a;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1.0625rem;
+    line-height: 1.5;
+    padding-block: 2rem 3rem;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  main { max-width: 38rem; margin: 0 auto; display: grid; gap: 1.25rem; }
+
+  header { text-align: center; display: grid; gap: .25rem; }
+  .eyebrow {
+    font-size: .8rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); font-weight: 700;
+  }
+  h1 {
+    font-family: var(--font-display); font-weight: 400;
+    font-size: clamp(2.2rem, 7vw, 3.2rem); line-height: 1.05;
+    margin: 0; color: var(--royal); text-wrap: balance;
+  }
+  /* Thin tricolor heraldic rule under the title */
+  .rule { height: 4px; width: 6rem; margin: .5rem auto 0;
+    background: linear-gradient(90deg, var(--red) 0 33%, var(--gold) 33% 66%, var(--royal) 66%); border-radius: 2px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-top: 6px solid var(--gold);
+    border-radius: 10px;
+    padding: clamp(1.25rem, 4vw, 2rem);
+    display: grid; gap: 1.25rem;
+    box-shadow: 0 6px 24px rgb(20 30 70 / .08);
+  }
+
+  /* Progress row: "Question 2 of 5" and running score */
+  .status { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem;
+    font-size: .9rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pips { display: flex; gap: .35rem; }
+  .pip { width: .7rem; height: .7rem; border-radius: 50%; border: 2px solid var(--line); }
+  .pip.current { border-color: var(--royal); }
+  .pip.right { background: var(--green); border-color: var(--green); }
+  .pip.wrong { background: var(--red); border-color: var(--red); }
+
+  h2 { margin: 0; font-size: clamp(1.3rem, 4vw, 1.55rem); line-height: 1.3; text-wrap: balance; }
+  h2:focus { outline: none; }
+
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: .6rem; min-width: 0; }
+  legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  .option {
+    display: flex; align-items: center; gap: .85rem;
+    width: 100%; text-align: left;
+    font: inherit; color: var(--ink);
+    background: var(--option-bg);
+    border: 2px solid var(--line); border-radius: 8px;
+    padding: .8rem 1rem; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .option:hover:not(:disabled) { border-color: var(--royal); }
+  .option:disabled { cursor: default; }
+  .option .key {
+    flex: none; width: 2rem; height: 2rem; display: grid; place-items: center;
+    border-radius: 50%; background: var(--card); border: 2px solid var(--line);
+    font-weight: 700; font-size: .95rem;
+  }
+  .option .text { min-width: 0; }
+  .option .mark { margin-left: auto; font-weight: 700; flex: none; }
+  .option.right { background: var(--right-bg); border-color: var(--green); }
+  .option.right .key { border-color: var(--green); color: var(--green); }
+  .option.wrong { background: var(--wrong-bg); border-color: var(--red); }
+  .option.wrong .key { border-color: var(--red); color: var(--red); }
+  .option.faded { opacity: .55; }
+
+  /* Feedback box after answering */
+  .feedback { border-radius: 8px; padding: 1rem; display: grid; gap: .35rem; border-left: 5px solid; }
+  .feedback.right { background: var(--right-bg); border-color: var(--green); }
+  .feedback.wrong { background: var(--wrong-bg); border-color: var(--red); }
+  .feedback strong { font-size: 1.1rem; }
+  .feedback p { margin: 0; }
+
+  .actions { display: flex; justify-content: flex-end; }
+  .btn {
+    font: inherit; font-weight: 700; font-size: 1.05rem;
+    background: var(--royal); color: var(--card);
+    border: 0; border-radius: 8px; padding: .75rem 1.4rem; cursor: pointer;
+  }
+  .btn:hover { filter: brightness(1.1); }
+
+  .hint-line { font-size: .85rem; color: var(--muted); text-align: center; margin: 0; }
+  kbd { font-family: inherit; font-weight: 700; border: 1px solid var(--line);
+    border-bottom-width: 2px; border-radius: 4px; padding: 0 .3rem; background: var(--card); }
+
+  /* Final score screen */
+  .result { text-align: center; display: grid; gap: .75rem; justify-items: center; }
+  .result h2:focus { outline: none; }
+  .big-score { font-family: var(--font-display); font-size: clamp(3.5rem, 14vw, 5rem);
+    line-height: 1; color: var(--royal); font-variant-numeric: tabular-nums; }
+  .verdict { margin: 0; max-width: 30rem; }
+
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main>
+  <header>
+    <span class="eyebrow">Monty Python and the Holy Grail</span>
+    <h1>Holy Grail Quiz</h1>
+    <div class="rule" aria-hidden="true"></div>
+  </header>
+
+  <!-- The quiz card. Its contents are swapped by JavaScript for each question and the final score. -->
+  <section class="card" id="quiz" aria-labelledby="question-text">
+    <!-- QUESTION VIEW -->
+    <div id="question-view">
+      <div class="status">
+        <span id="progress-text">Question 1 of 5</span>
+        <div class="pips" id="pips" aria-hidden="true"></div>
+        <span id="score-text">Score: 0</span>
+      </div>
+      <h2 id="question-text" tabindex="-1" style="margin-block:1rem">Loading…</h2>
+      <fieldset id="options">
+        <legend>Answer choices</legend>
+      </fieldset>
+      <!-- Feedback appears here after answering. role=status reads it aloud to screen readers. -->
+      <div id="feedback-region" role="status" aria-live="polite" style="margin-top:1rem"></div>
+      <div class="actions" style="margin-top:1rem">
+        <button type="button" class="btn" id="next-btn" hidden>Next question</button>
+      </div>
+    </div>
+
+    <!-- RESULT VIEW -->
+    <div id="result-view" class="result" hidden>
+      <span class="eyebrow">Your final score</span>
+      <h2 id="result-heading" tabindex="-1"><span class="big-score" id="final-score">0 / 5</span></h2>
+      <p class="verdict" id="verdict"></p>
+      <button type="button" class="btn" id="play-again-btn">Play again</button>
+    </div>
+  </section>
+
+  <p class="hint-line">Keyboard: press <kbd>A</kbd>–<kbd>D</kbd> to answer, <kbd>Enter</kbd> to continue.</p>
+</main>
+
+<script>
+// v1.0 - 2026-11-09 - initial build
+
+/* ------------------------------------------------------------------
+   THE QUESTIONS
+   Each question has its prompt, four answer choices, which choice is
+   correct (by its position in the list, starting at 0), and a short
+   explanation shown after you answer.
+   To add or change questions, edit this list. Nothing else needs to change.
+------------------------------------------------------------------ */
+const QUESTIONS = [
+  {
+    prompt: "What do the Knights Who Say Ni demand from King Arthur?",
+    choices: ["A shrubbery", "A golden goose", "A herring", "A holy relic"],
+    correct: 0,
+    explanation: "They first demand a shrubbery. A herring comes up later, when they ask Arthur to cut down a tree with one."
+  },
+  {
+    prompt: "What do the knights use instead of real horses?",
+    choices: ["Brooms", "Coconut halves clapped together", "Wooden hobby horses", "Cardboard cutouts"],
+    correct: 1,
+    explanation: "Their servants, like Arthur's squire Patsy, bang coconut halves together to make hoofbeat sounds."
+  },
+  {
+    prompt: "What deadly creature guards the cave of Caerbannog?",
+    choices: ["A three-headed knight", "A dragon", "A white rabbit", "A giant badger"],
+    correct: 2,
+    explanation: "The Rabbit of Caerbannog looks harmless but takes out several knights."
+  },
+  {
+    prompt: "When using the Holy Hand Grenade of Antioch, what number must you count to before throwing it?",
+    choices: ["Two", "Three", "Five", "Seven"],
+    correct: 1,
+    explanation: "Three is the number. Four is not counted, and five is right out."
+  },
+  {
+    prompt: "How does King Arthur get across the Bridge of Death?",
+    choices: [
+      "He defeats the Bridgekeeper in a sword fight",
+      "He answers with the capital of Assyria",
+      "He asks whether the swallow is African or European",
+      "He names his favorite color"
+    ],
+    correct: 2,
+    explanation: "Asked the airspeed velocity of an unladen swallow, Arthur asks which kind. The Bridgekeeper doesn't know and is flung into the gorge."
+  }
+];
+
+/* The letters shown beside each answer choice. */
+const LETTERS = ["A", "B", "C", "D"];
+
+/* ------------------------------------------------------------------
+   GRABBING PAGE ELEMENTS
+   We look up each part of the page once and keep a reference to it,
+   so the rest of the code can update it quickly.
+------------------------------------------------------------------ */
+const questionView   = document.getElementById("question-view");
+const resultView     = document.getElementById("result-view");
+const progressText   = document.getElementById("progress-text");
+const scoreText      = document.getElementById("score-text");
+const pipsBox        = document.getElementById("pips");
+const questionText   = document.getElementById("question-text");
+const optionsBox     = document.getElementById("options");
+const feedbackRegion = document.getElementById("feedback-region");
+const nextBtn        = document.getElementById("next-btn");
+const finalScore     = document.getElementById("final-score");
+const verdict        = document.getElementById("verdict");
+const resultHeading  = document.getElementById("result-heading");
+const playAgainBtn   = document.getElementById("play-again-btn");
+
+/* ------------------------------------------------------------------
+   GAME STATE
+   These variables remember where you are in the quiz.
+   - order:     the questions for this play, each with its choices shuffled
+   - current:   which question you're on (0 = first)
+   - score:     how many you've gotten right
+   - answered:  true once you've picked an answer for the current question
+   - results:   a list of true/false, one per question, for the progress dots
+------------------------------------------------------------------ */
+let order = [];
+let current = 0;
+let score = 0;
+let answered = false;
+let results = [];
+
+/* ------------------------------------------------------------------
+   SHUFFLE HELPER
+   Mixes up a list into a random order (the "Fisher-Yates" method):
+   walk backwards through the list, swapping each item with a random
+   earlier one. Returns a new list and leaves the original alone.
+------------------------------------------------------------------ */
+function shuffle(list) {
+  const copy = list.slice();
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+/* ------------------------------------------------------------------
+   PREPARE A NEW GAME
+   Keeps the questions in their original order, but shuffles the four
+   answer choices inside each one so the right answer isn't always in
+   the same spot. We remember which shuffled choice is correct.
+------------------------------------------------------------------ */
+function prepareGame() {
+  order = QUESTIONS.map(function (q) {
+    // Pair each choice with whether it's the correct one, then shuffle the pairs.
+    const tagged = q.choices.map(function (text, i) {
+      return { text: text, isCorrect: i === q.correct };
+    });
+    return { prompt: q.prompt, explanation: q.explanation, choices: shuffle(tagged) };
+  });
+  current = 0;
+  score = 0;
+  results = [];
+}
+
+/* ------------------------------------------------------------------
+   DRAW THE PROGRESS DOTS
+   One small circle per question: green if right, red if wrong,
+   outlined in blue for the question you're on now.
+------------------------------------------------------------------ */
+function renderPips() {
+  pipsBox.innerHTML = "";
+  for (let i = 0; i < order.length; i++) {
+    const pip = document.createElement("span");
+    pip.className = "pip";
+    if (results[i] === true) pip.classList.add("right");
+    else if (results[i] === false) pip.classList.add("wrong");
+    else if (i === current) pip.classList.add("current");
+    pipsBox.appendChild(pip);
+  }
+}
+
+/* ------------------------------------------------------------------
+   SHOW THE CURRENT QUESTION
+   Fills in the question text, builds one button per answer choice,
+   clears any old feedback, hides the Next button, and moves keyboard
+   focus to the question so screen readers announce it.
+------------------------------------------------------------------ */
+function showQuestion() {
+  const q = order[current];
+  answered = false;
+
+  questionView.hidden = false;
+  resultView.hidden = true;
+
+  progressText.textContent = "Question " + (current + 1) + " of " + order.length;
+  scoreText.textContent = "Score: " + score;
+  questionText.textContent = q.prompt;
+  feedbackRegion.innerHTML = "";
+  nextBtn.hidden = true;
+  renderPips();
+
+  // Remove the old answer buttons, keeping the hidden <legend>.
+  optionsBox.querySelectorAll(".option").forEach(function (b) { b.remove(); });
+
+  // Build a button for each choice, labelled with its letter (A, B, C, D).
+  q.choices.forEach(function (choice, i) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "option";
+    btn.dataset.index = i;
+    // aria-label gives screen readers a clear "A: A shrubbery" reading.
+    btn.setAttribute("aria-label", LETTERS[i] + ": " + choice.text);
+    btn.innerHTML =
+      '<span class="key" aria-hidden="true">' + LETTERS[i] + '</span>' +
+      '<span class="text"></span>' +
+      '<span class="mark" aria-hidden="true"></span>';
+    // Set the text safely (as plain text, never as HTML).
+    btn.querySelector(".text").textContent = choice.text;
+    btn.addEventListener("click", function () { pickAnswer(i); });
+    optionsBox.appendChild(btn);
+  });
+
+  // Move focus to the question heading so keyboard and screen-reader users start here.
+  questionText.focus();
+}
+
+/* ------------------------------------------------------------------
+   HANDLE AN ANSWER
+   Runs when you click a choice or press its letter key.
+   - Locks all the buttons so you can't answer twice.
+   - Colors your pick green (right) or red (wrong).
+   - Always highlights the correct answer in green.
+   - Shows a message saying whether you were right, plus the correct
+     answer if you weren't, and a short explanation.
+   - Reveals the Next button and moves focus to it.
+------------------------------------------------------------------ */
+function pickAnswer(index) {
+  if (answered) return;          // ignore extra clicks after answering
+  answered = true;
+
+  const q = order[current];
+  const picked = q.choices[index];
+  const correctIndex = q.choices.findIndex(function (c) { return c.isCorrect; });
+  const wasRight = picked.isCorrect;
+
+  if (wasRight) score++;
+  results[current] = wasRight;
+  scoreText.textContent = "Score: " + score;
+  renderPips();
+
+  // Update every answer button to show the outcome.
+  optionsBox.querySelectorAll(".option").forEach(function (btn) {
+    const i = Number(btn.dataset.index);
+    btn.disabled = true;
+    const mark = btn.querySelector(".mark");
+    if (i === correctIndex) {
+      btn.classList.add("right");
+      mark.textContent = "✓ Correct";
+    } else if (i === index) {
+      btn.classList.add("wrong");
+      mark.textContent = "✗ Your pick";
+    } else {
+      btn.classList.add("faded");
+    }
+  });
+
+  // Build the feedback message.
+  const box = document.createElement("div");
+  box.className = "feedback " + (wasRight ? "right" : "wrong");
+
+  const headline = document.createElement("strong");
+  headline.textContent = wasRight ? "Right! You may pass." : "Wrong! Into the gorge with you.";
+  box.appendChild(headline);
+
+  if (!wasRight) {
+    const answerLine = document.createElement("p");
+    answerLine.textContent = "The right answer is " + LETTERS[correctIndex] + ": " + q.choices[correctIndex].text + ".";
+    box.appendChild(answerLine);
+  }
+
+  const why = document.createElement("p");
+  why.textContent = q.explanation;
+  box.appendChild(why);
+
+  feedbackRegion.innerHTML = "";
+  feedbackRegion.appendChild(box);
+
+  // On the last question, the button leads to the score instead.
+  nextBtn.textContent = (current === order.length - 1) ? "See my score" : "Next question";
+  nextBtn.hidden = false;
+  nextBtn.focus();
+}
+
+/* ------------------------------------------------------------------
+   GO TO THE NEXT QUESTION (OR THE SCORE)
+------------------------------------------------------------------ */
+function goNext() {
+  if (current < order.length - 1) {
+    current++;
+    showQuestion();
+  } else {
+    showResult();
+  }
+}
+
+/* ------------------------------------------------------------------
+   SHOW THE FINAL SCORE
+   Displays "X / 5" and a short message that depends on how you did,
+   then puts focus on the score so it's announced.
+------------------------------------------------------------------ */
+function showResult() {
+  questionView.hidden = true;
+  resultView.hidden = false;
+
+  finalScore.textContent = score + " / " + order.length;
+
+  let message;
+  if (score === order.length)      message = "A perfect score. You have found the Grail, or at least a very nice shrubbery.";
+  else if (score >= 3)             message = "Well done, brave knight. You may cross the bridge.";
+  else if (score >= 1)             message = "'Tis but a scratch. Have another go.";
+  else                             message = "Run away! Then come back and try again.";
+  verdict.textContent = message;
+
+  // aria-label so screen readers say "Final score 4 out of 5".
+  resultHeading.setAttribute("aria-label", "Final score " + score + " out of " + order.length);
+  resultHeading.focus();
+}
+
+/* ------------------------------------------------------------------
+   START (OR RESTART) THE GAME
+------------------------------------------------------------------ */
+function startGame() {
+  prepareGame();
+  showQuestion();
+}
+
+/* ------------------------------------------------------------------
+   BUTTON CLICKS
+------------------------------------------------------------------ */
+nextBtn.addEventListener("click", goNext);
+playAgainBtn.addEventListener("click", startGame);
+
+/* ------------------------------------------------------------------
+   KEYBOARD SHORTCUTS
+   - A, B, C, D or 1, 2, 3, 4 pick that answer (only while a question
+     is waiting for an answer).
+   - Enter and Space already press whichever button has focus, so the
+     Next and Play again buttons work without extra code.
+   We skip shortcuts when Ctrl, Alt or Cmd is held, so browser
+   shortcuts like Ctrl+C still work normally.
+------------------------------------------------------------------ */
+document.addEventListener("keydown", function (event) {
+  if (event.ctrlKey || event.altKey || event.metaKey) return;
+  if (questionView.hidden || answered) return;
+
+  const key = event.key.toUpperCase();
+  let index = LETTERS.indexOf(key);
+  if (index === -1 && key >= "1" && key <= "4") index = Number(key) - 1;
+
+  if (index >= 0 && index < order[current].choices.length) {
+    event.preventDefault();
+    pickAnswer(index);
+  }
+});
+
+/* Kick things off when the page loads. */
+startGame();
+</script>
+
+</body></html>
