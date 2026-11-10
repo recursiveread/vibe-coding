@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camping Packing List</title>
+<!--
+  ==========================================================================
+  LIBRARIES USED
+  --------------------------------------------------------------------------
+  1. qrcode-generator
+     Version: 1.4.4
+     Author:  Kazuhiko Arase
+     Source:  cdnjs - https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js
+     Purpose: Works out the black-and-white square pattern of a QR code for
+              the share link. This page then draws that pattern on a canvas.
+  ==========================================================================
+
+  VERSION HISTORY
+  v1.0 - 2026-11-10 - Initial build: add / tick / remove items, saved in
+                      localStorage, "Send to my phone" link + QR code,
+                      ask-before-adding when a list arrives in a link,
+                      too-long-for-QR warning.
+
+  PRIVACY NOTE
+  Nothing is sent to any server. The list lives in this browser's
+  localStorage. The share link keeps the list after the # sign, and browsers
+  never send the part after # to a web server.
+-->
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --card: #ffffff;
+    --text: #1f2a1f;
+    --muted: #5b665b;
+    --accent: #2f6b3a;
+    --accent-dark: #224f2b;
+    --danger: #a3332b;
+    --border: #d6d1c4;
+    --focus: #e0a526;
+    --done: #8a938a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161c17;
+      --card: #212a22;
+      --text: #ecefe9;
+      --muted: #a9b3a9;
+      --accent: #5fae6c;
+      --accent-dark: #7cc488;
+      --danger: #ef7d73;
+      --border: #3a463b;
+      --done: #7f897f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 1.05rem;
+    line-height: 1.5;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+  }
+  h1 { margin: 0 0 4px; font-size: 1.8rem; }
+  h2 { font-size: 1.2rem; margin: 0 0 8px; }
+  .status { margin: 0 0 20px; color: var(--muted); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  /* Add-item form */
+  .add-form label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  /* Buttons */
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 10px 16px;
+    border: 2px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    min-height: 44px;
+  }
+  button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+  button.secondary { background: transparent; color: var(--accent); }
+  button.secondary:hover { background: var(--accent); color: #fff; }
+  button.remove {
+    background: transparent;
+    border-color: transparent;
+    color: var(--danger);
+    padding: 6px 10px;
+    min-width: 44px;
+  }
+  button.remove:hover { border-color: var(--danger); background: transparent; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* The list itself */
+  #list { list-style: none; margin: 0; padding: 0; }
+  #list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  #list li:last-child { border-bottom: none; }
+  #list input[type="checkbox"] { width: 24px; height: 24px; flex-shrink: 0; accent-color: var(--accent); }
+  #list label { flex: 1; overflow-wrap: anywhere; cursor: pointer; }
+  #list li.done label { text-decoration: line-through; color: var(--done); }
+  .empty { color: var(--muted); margin: 0; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* Share / QR section */
+  #shareArea[hidden] { display: none; }
+  #qrCanvas {
+    display: block;
+    width: 100%;
+    max-width: 300px;
+    height: auto;
+    margin: 12px auto;
+    image-rendering: pixelated;
+    border-radius: 6px;
+  }
+  .link-box {
+    font-family: ui-monospace, monospace;
+    font-size: 0.85rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    overflow-wrap: anywhere;
+    max-height: 6em;
+    overflow-y: auto;
+  }
+  .message { margin: 8px 0; }
+  .message.warn { color: var(--danger); font-weight: 600; }
+
+  /* Import dialog */
+  dialog {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+    color: var(--text);
+    padding: 20px;
+    width: min(480px, calc(100vw - 32px));
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  #importItems {
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 8px 0 16px;
+    padding-left: 20px;
+    overflow-wrap: anywhere;
+  }
+  .dialog-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  @media (max-width: 420px) {
+    .add-row { flex-direction: column; }
+    .actions button, .dialog-buttons button { flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1 id="pageTitle">Camping Packing List</h1>
+    <p class="status" id="status" aria-live="polite"></p>
+  </header>
+
+  <!-- Add a new item -->
+  <section class="card" aria-labelledby="addHeading">
+    <h2 id="addHeading" class="visually-hidden">Add an item</h2>
+    <form class="add-form" id="addForm">
+      <label for="newItem">New item</label>
+      <div class="add-row">
+        <input type="text" id="newItem" autocomplete="off" required>
+        <button type="submit">Add</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- The list -->
+  <section class="card" aria-labelledby="listHeading">
+    <h2 id="listHeading">Items</h2>
+    <ul id="list"></ul>
+    <p class="empty" id="emptyNote" hidden>Your list is empty. Add something above.</p>
+  </section>
+
+  <!-- Buttons for the whole list -->
+  <section class="actions" aria-label="List actions">
+    <button type="button" id="sendBtn" aria-controls="shareArea">Send to my phone</button>
+    <button type="button" id="clearDoneBtn" class="secondary">Remove ticked items</button>
+  </section>
+
+  <!-- Share link and QR code (hidden until "Send to my phone" is pressed) -->
+  <section class="card" id="shareArea" hidden aria-labelledby="shareHeading" style="margin-top:16px">
+    <h2 id="shareHeading" tabindex="-1">Scan with your phone</h2>
+    <p class="message" id="shareMessage"></p>
+    <canvas id="qrCanvas" role="img" aria-label="QR code for the share link"></canvas>
+    <p><strong>Link:</strong></p>
+    <div class="link-box" id="shareLink"></div>
+    <div class="actions" style="margin-top:8px">
+      <button type="button" id="copyBtn" class="secondary">Copy link</button>
+    </div>
+  </section>
+
+  <!-- Screen-reader announcements -->
+  <div class="visually-hidden" aria-live="polite" id="announcer"></div>
+</main>
+
+<!-- Asks before adding a list that arrived in a link -->
+<dialog id="importDialog" aria-labelledby="importHeading" aria-describedby="importIntro">
+  <form method="dialog">
+    <h2 id="importHeading">A list arrived in this link</h2>
+    <p id="importIntro"></p>
+    <ul id="importItems"></ul>
+    <div class="dialog-buttons">
+      <button type="submit" value="add">Add to my list</button>
+      <button type="submit" value="replace" class="secondary">Replace my list</button>
+      <button type="submit" value="ignore" class="secondary">Ignore</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+// v1.0 - initial build
+
+// ==========================================================================
+// EDITABLE CONTENT - change these to make a different list.
+// ==========================================================================
+const LIST_SETTINGS = {
+  // The heading shown at the top of the page and in the browser tab.
+  title: "Camping Packing List",
+
+  // The items the list starts with the very first time the page opens.
+  // (After that, the saved list in this browser is used instead.)
+  starterItems: ["Tent", "Cooler", "Sleeping bag", "Pop-up", "Camp stove", "Camp chair"],
+
+  // Longest allowed item name, in characters.
+  maxItemLength: 100,
+
+  // Most items a list may hold (also the most accepted from a link).
+  maxItems: 300,
+
+  // The name this list is saved under in the browser. Change it to keep
+  // a second, separate list on the same website.
+  storageKey: "packingList.v1",
+
+  // A link that starts with a QR code longer than this (in characters)
+  // still works, but the code gets dense and harder for phones to read.
+  denseWarningLength: 1200
+};
+// ==========================================================================
+
+
+// ---- Grab the parts of the page we need to work with ----
+const listEl       = document.getElementById("list");
+const emptyNote    = document.getElementById("emptyNote");
+const statusEl     = document.getElementById("status");
+const addForm      = document.getElementById("addForm");
+const newItemInput = document.getElementById("newItem");
+const sendBtn      = document.getElementById("sendBtn");
+const clearDoneBtn = document.getElementById("clearDoneBtn");
+const shareArea    = document.getElementById("shareArea");
+const shareHeading = document.getElementById("shareHeading");
+const shareMessage = document.getElementById("shareMessage");
+const qrCanvas     = document.getElementById("qrCanvas");
+const shareLinkEl  = document.getElementById("shareLink");
+const copyBtn      = document.getElementById("copyBtn");
+const announcer    = document.getElementById("announcer");
+const importDialog = document.getElementById("importDialog");
+const importIntro  = document.getElementById("importIntro");
+const importItems  = document.getElementById("importItems");
+
+// The label in the link, e.g. ...index.html#list=[...]
+const HASH_PREFIX = "list=";
+
+// The list currently on screen. Each item looks like:
+// { id: "abc123", text: "Tent", done: false }
+let items = [];
+
+// A list that arrived in a link and is waiting for a yes/no answer.
+let pendingImport = null;
+
+
+// --------------------------------------------------------------------------
+// cleanText: tidies any text before it is used. Removes invisible control
+// characters, squashes extra spaces, and cuts it to the maximum length.
+// The text is only ever shown with textContent, so it is always treated as
+// plain words - never as HTML or code.
+// --------------------------------------------------------------------------
+function cleanText(value) {
+  return String(value)
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, LIST_SETTINGS.maxItemLength);
+}
+
+// makeId: gives each item a unique name so the page can tell them apart.
+function makeId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// announce: reads a short message aloud for screen-reader users.
+function announce(message) {
+  announcer.textContent = "";
+  setTimeout(() => { announcer.textContent = message; }, 50);
+}
+
+
+// --------------------------------------------------------------------------
+// SAVING AND LOADING
+// The list is stored in localStorage, which keeps it in this browser even
+// after the page is closed. If the browser blocks storage (some private
+// windows do), the page still works - it just won't remember the list.
+// --------------------------------------------------------------------------
+function saveList() {
+  try {
+    const simple = items.map(item => ({ text: item.text, done: item.done }));
+    localStorage.setItem(LIST_SETTINGS.storageKey, JSON.stringify(simple));
+  } catch (error) {
+    statusEl.textContent = "Note: this browser is not letting the page save your list.";
+  }
+}
+
+function loadList() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(LIST_SETTINGS.storageKey);
+  } catch (error) {
+    saved = null;
+  }
+
+  // First visit (nothing saved yet): start with the starter items.
+  if (saved === null) {
+    return LIST_SETTINGS.starterItems.map(text => ({ id: makeId(), text: cleanText(text), done: false }));
+  }
+
+  // Otherwise read the saved list, keeping only entries that look right.
+  try {
+    const data = JSON.parse(saved);
+    if (!Array.isArray(data)) return [];
+    return data
+      .filter(entry => entry && typeof entry.text === "string" && cleanText(entry.text))
+      .slice(0, LIST_SETTINGS.maxItems)
+      .map(entry => ({ id: makeId(), text: cleanText(entry.text), done: entry.done === true }));
+  } catch (error) {
+    return [];
+  }
+}
+
+
+// --------------------------------------------------------------------------
+// DRAWING THE LIST
+// Rebuilds the list on screen from the "items" array. Each row gets a
+// checkbox (with a label so clicking the words ticks it) and a Remove button.
+// --------------------------------------------------------------------------
+function renderList() {
+  listEl.replaceChildren();
+
+  items.forEach(item => {
+    const li = document.createElement("li");
+    if (item.done) li.classList.add("done");
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = "item-" + item.id;
+    checkbox.checked = item.done;
+    checkbox.addEventListener("change", () => toggleItem(item.id));
+
+    const label = document.createElement("label");
+    label.htmlFor = checkbox.id;
+    label.textContent = item.text; // plain text only
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "remove";
+    removeBtn.textContent = "✕";
+    removeBtn.setAttribute("aria-label", "Remove " + item.text);
+    removeBtn.addEventListener("click", () => removeItem(item.id));
+
+    li.append(checkbox, label, removeBtn);
+    listEl.append(li);
+  });
+
+  // Show the "empty" note and the packed count.
+  emptyNote.hidden = items.length > 0;
+  const packed = items.filter(item => item.done).length;
+  statusEl.textContent = items.length
+    ? packed + " of " + items.length + " packed"
+    : "No items yet";
+
+  // If a QR code is showing, it is now out of date - hide it.
+  shareArea.hidden = true;
+}
+
+
+// --------------------------------------------------------------------------
+// LIST ACTIONS: add, tick, remove, remove all ticked
+// --------------------------------------------------------------------------
+addForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const text = cleanText(newItemInput.value);
+  if (!text) return;
+
+  if (items.length >= LIST_SETTINGS.maxItems) {
+    announce("The list is full.");
+    statusEl.textContent = "The list is full (" + LIST_SETTINGS.maxItems + " items).";
+    return;
+  }
+
+  items.push({ id: makeId(), text: text, done: false });
+  saveList();
+  renderList();
+  newItemInput.value = "";
+  newItemInput.focus();
+  announce(text + " added.");
+});
+
+function toggleItem(id) {
+  const item = items.find(entry => entry.id === id);
+  if (!item) return;
+  item.done = !item.done;
+  saveList();
+  renderList();
+  // Put keyboard focus back on the same checkbox after redrawing.
+  document.getElementById("item-" + id).focus();
+  announce(item.text + (item.done ? " ticked." : " unticked."));
+}
+
+function removeItem(id) {
+  const index = items.findIndex(entry => entry.id === id);
+  if (index === -1) return;
+  const [removed] = items.splice(index, 1);
+  saveList();
+  renderList();
+
+  // Move focus to the next item (or the previous one, or the text box)
+  // so keyboard users don't get lost.
+  const next = items[index] || items[index - 1];
+  if (next) document.getElementById("item-" + next.id).focus();
+  else newItemInput.focus();
+  announce(removed.text + " removed.");
+}
+
+clearDoneBtn.addEventListener("click", () => {
+  const count = items.filter(item => item.done).length;
+  if (count === 0) { announce("No ticked items to remove."); return; }
+  if (!confirm("Remove " + count + " ticked item" + (count === 1 ? "" : "s") + "?")) return;
+  items = items.filter(item => !item.done);
+  saveList();
+  renderList();
+  announce(count + " ticked items removed.");
+});
+
+
+// --------------------------------------------------------------------------
+// SEND TO MY PHONE
+// Turns the list into a compact piece of text like [["Tent",0],["Cooler",1]]
+// (1 = ticked), puts it after "#list=" on the end of this page's address,
+// and draws that link as a QR code.
+// --------------------------------------------------------------------------
+function buildShareLink() {
+  const compact = items.map(item => [item.text, item.done ? 1 : 0]);
+  const pageAddress = location.origin + location.pathname + location.search;
+  return pageAddress + "#" + HASH_PREFIX + encodeURIComponent(JSON.stringify(compact));
+}
+
+// drawQr: asks the library for the QR pattern, then paints the squares on
+// the canvas. Returns false if the link is too long to fit in any QR code.
+function drawQr(text) {
+  const qr = qrcode(0, "L"); // 0 = pick the size automatically, "L" = fits the most data
+  qr.addData(text, "Byte");
+  try {
+    qr.make(); // the library throws an error here when the text is too long
+  } catch (error) {
+    return false;
+  }
+
+  const modules = qr.getModuleCount(); // squares per side
+  const quietZone = 4;                  // blank border scanners need
+  const scale = Math.max(3, Math.floor(600 / (modules + quietZone * 2)));
+  const size = (modules + quietZone * 2) * scale;
+
+  qrCanvas.width = size;
+  qrCanvas.height = size;
+  const ctx = qrCanvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = "#000000";
+  for (let row = 0; row < modules; row++) {
+    for (let col = 0; col < modules; col++) {
+      if (qr.isDark(row, col)) {
+        ctx.fillRect((col + quietZone) * scale, (row + quietZone) * scale, scale, scale);
+      }
+    }
+  }
+  return true;
+}
+
+sendBtn.addEventListener("click", () => {
+  if (items.length === 0) {
+    announce("Add something to the list first.");
+    statusEl.textContent = "Add something to the list first.";
+    return;
+  }
+
+  const link = buildShareLink();
+  shareLinkEl.textContent = link;
+  shareMessage.className = "message";
+  const notes = [];
+
+  // The QR library comes from the internet; check it actually loaded.
+  if (typeof qrcode === "undefined") {
+    qrCanvas.hidden = true;
+    shareMessage.classList.add("warn");
+    notes.push("The QR code tool did not load (are you offline?). You can still copy the link.");
+  } else if (!drawQr(link)) {
+    // Too long for any QR code.
+    qrCanvas.hidden = true;
+    shareMessage.classList.add("warn");
+    notes.push("Your list is too long to fit in a QR code (the link is " +
+      link.length.toLocaleString() + " characters; a QR code holds about 2,900). " +
+      "Remove some items or shorten their names, or use Copy link instead.");
+  } else {
+    qrCanvas.hidden = false;
+    qrCanvas.setAttribute("aria-label", "QR code linking to this page with your " + items.length + " item list");
+    notes.push("Point your phone's camera at the code and open the link.");
+    if (link.length > LIST_SETTINGS.denseWarningLength) {
+      notes.push("This is a long list, so the code is very detailed - hold your phone steady and close.");
+    }
+  }
+
+  // A page opened straight from a file on this computer can't be opened by a phone.
+  if (location.protocol === "file:") {
+    notes.push("Heads up: this page is opened from a file on this computer, so the link will only work on your phone once the page is put on a website.");
+  }
+
+  shareMessage.textContent = notes.join(" ");
+  shareArea.hidden = false;
+  shareHeading.focus();
+});
+
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(shareLinkEl.textContent);
+    announce("Link copied.");
+    copyBtn.textContent = "Copied!";
+  } catch (error) {
+    // Fallback: select the link text so it can be copied by hand.
+    const range = document.createRange();
+    range.selectNodeContents(shareLinkEl);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    copyBtn.textContent = "Press Ctrl+C / ⌘+C to copy";
+  }
+  setTimeout(() => { copyBtn.textContent = "Copy link"; }, 2500);
+});
+
+
+// --------------------------------------------------------------------------
+// RECEIVING A LIST FROM A LINK
+// When the page opens with "#list=..." in the address, check it carefully.
+// Anything that is not exactly a list of [text, 0 or 1] pairs is ignored.
+// A good list is shown in a dialog, and nothing changes until you choose.
+// --------------------------------------------------------------------------
+function readListFromHash() {
+  const hash = location.hash.slice(1);
+  if (!hash.startsWith(HASH_PREFIX)) return null;
+
+  let data;
+  try {
+    data = JSON.parse(decodeURIComponent(hash.slice(HASH_PREFIX.length)));
+  } catch (error) {
+    return null; // not readable - ignore
+  }
+
+  if (!Array.isArray(data) || data.length === 0 || data.length > LIST_SETTINGS.maxItems) return null;
+
+  const result = [];
+  for (const entry of data) {
+    if (!Array.isArray(entry) || entry.length !== 2) return null;
+    const [text, done] = entry;
+    if (typeof text !== "string" || (done !== 0 && done !== 1)) return null;
+    const clean = cleanText(text);
+    if (!clean) return null;
+    result.push({ text: clean, done: done === 1 });
+  }
+  return result;
+}
+
+function checkLinkForList() {
+  if (!location.hash) return;
+  const incoming = readListFromHash();
+
+  // Remove the list from the address bar either way, so a refresh
+  // doesn't ask again.
+  history.replaceState(null, "", location.pathname + location.search);
+
+  if (!incoming) return; // not a proper list - quietly ignore
+
+  pendingImport = incoming;
+  importIntro.textContent = "It has " + incoming.length + " item" +
+    (incoming.length === 1 ? "" : "s") + ". Your current list has " + items.length + ".";
+  importItems.replaceChildren();
+  incoming.forEach(entry => {
+    const li = document.createElement("li");
+    li.textContent = entry.text + (entry.done ? " (packed)" : ""); // plain text only
+    importItems.append(li);
+  });
+  importDialog.showModal();
+}
+
+// Runs when the dialog closes, by button or by pressing Escape.
+importDialog.addEventListener("close", () => {
+  const choice = importDialog.returnValue; // "add", "replace", "ignore", or "" (Escape)
+  importDialog.returnValue = "";
+  if (!pendingImport) return;
+
+  if (choice === "add") {
+    // Add only items you don't already have (ignoring upper/lower case).
+    const existing = new Set(items.map(item => item.text.toLowerCase()));
+    let added = 0;
+    pendingImport.forEach(entry => {
+      if (!existing.has(entry.text.toLowerCase()) && items.length < LIST_SETTINGS.maxItems) {
+        items.push({ id: makeId(), text: entry.text, done: entry.done });
+        existing.add(entry.text.toLowerCase());
+        added++;
+      }
+    });
+    saveList();
+    renderList();
+    announce(added + " item" + (added === 1 ? "" : "s") + " added from the link.");
+  } else if (choice === "replace") {
+    if (confirm("Replace your " + items.length + " item list with the one from the link?")) {
+      items = pendingImport.map(entry => ({ id: makeId(), text: entry.text, done: entry.done }));
+      saveList();
+      renderList();
+      announce("List replaced.");
+    } else {
+      announce("Kept your list.");
+    }
+  } else {
+    announce("Ignored the list from the link.");
+  }
+  pendingImport = null;
+  newItemInput.focus();
+});
+
+
+// --------------------------------------------------------------------------
+// START UP
+// --------------------------------------------------------------------------
+document.title = LIST_SETTINGS.title;
+document.getElementById("pageTitle").textContent = LIST_SETTINGS.title;
+newItemInput.maxLength = LIST_SETTINGS.maxItemLength;
+
+items = loadList();
+saveList();
+renderList();
+checkLinkForList();
+
+// If a new link is pasted into the address bar while the page is open.
+window.addEventListener("hashchange", checkLinkForList);
+</script>
+</body>
+</html>
