@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<!--
+  The Cozy Skein — a yarn shop clicker game
+  ==========================================
+  Version history
+  v1.0 - 2026-11-10 - initial build: big yarn button (mouse, touch, Space, Enter),
+                      five helpers with rising prices, readable big numbers,
+                      auto-save to localStorage, up to 8 hours of "while you were away"
+                      earnings, two-step "Start over", floating "+1" (skipped when
+                      reduced motion is on).
+  v1.1 - 2026-11-10 - cozy yarn shop look: warm wood, linen and stitching colors,
+                      a drawn ball-of-yarn button, and a short story line at the top.
+  v1.2 - 2026-11-10 - achievements shown as badges (first helper, 1,000 made, one of
+                      every helper), saved with the game.
+  v1.3 - 2026-11-10 - a final "Shop cat" purchase that wins the game, with a you-won
+                      screen showing how long it took.
+
+  Libraries used: none. Everything is plain HTML, CSS, and JavaScript.
+  Privacy: nothing is sent to any server. The game is saved only in this
+  browser's localStorage.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Cozy Skein — Yarn Shop Clicker</title>
+  <style>
+    /* ---------- Colors and base styles (v1.1: cozy yarn shop theme) ---------- */
+    :root {
+      --linen: #f6ecdc;
+      --card: #fffaf2;
+      --border: #e2cdb4;
+      --stitch: #c9a98a;
+      --text: #3f2a22;
+      --muted: #6b4f42;
+      --yarn: #b4535f;
+      --yarn-dark: #7f3340;
+      --tag: #edc66b;
+      --wood: #7a4b30;
+      --wood-dark: #5e3a25;
+      --sage: #55704f;
+      --sage-light: #e3ebdc;
+      --focus: #1f5fbf;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+      color: var(--text);
+      line-height: 1.5;
+      /* A soft criss-cross pattern, like woven linen */
+      background-color: var(--linen);
+      background-image:
+        repeating-linear-gradient(45deg, rgba(122, 75, 48, 0.05) 0 2px, transparent 2px 12px),
+        repeating-linear-gradient(-45deg, rgba(122, 75, 48, 0.05) 0 2px, transparent 2px 12px);
+    }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+    /* Hidden from sight but still read by screen readers */
+    .visually-hidden {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+
+    /* The header looks like a wooden shop sign */
+    header {
+      text-align: center;
+      padding: 1.5rem 1rem 1.25rem;
+      background: linear-gradient(var(--wood), #66402a);
+      color: #fff8ee;
+      border-bottom: 6px solid var(--wood-dark);
+    }
+    header h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: 0.02em; }
+    header p { margin: 0.25rem 0 0; color: #f3dfc6; }
+    header .story {
+      max-width: 42ch;
+      margin: 0.6rem auto 0;
+      font-style: italic;
+      color: #fff8ee;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1rem;
+      display: grid;
+      gap: 1.25rem;
+    }
+    /* Two columns on wider screens: the yarn button on the left, the shop on the right */
+    @media (min-width: 800px) {
+      main { grid-template-columns: 1fr 1.2fr; align-items: start; }
+    }
+
+    /* Panels have a dashed line inside the edge, like stitching */
+    section.panel {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      outline: 2px dashed var(--stitch);
+      outline-offset: -10px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 0 rgba(94, 58, 37, 0.15);
+    }
+    h2 { margin: 0 0 0.75rem; font-size: 1.35rem; color: var(--wood-dark); }
+
+    /* ---------- Welcome back banner ---------- */
+    .welcome {
+      max-width: 1100px; margin: 0.75rem auto 0; padding: 0 1rem;
+    }
+    .welcome-inner {
+      background: var(--sage-light);
+      border: 2px dashed var(--sage);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      display: flex; flex-wrap: wrap; gap: 0.75rem;
+      align-items: center; justify-content: space-between;
+    }
+    .welcome p { margin: 0; }
+
+    /* ---------- Totals ---------- */
+    .totals { text-align: center; margin-bottom: 0.5rem; }
+    .yarn-count { font-size: clamp(2rem, 7vw, 2.8rem); font-weight: bold; margin: 0; color: var(--yarn-dark); }
+    .yarn-label { margin: 0; color: var(--muted); }
+    .rate { margin: 0.25rem 0 0; font-size: 1.1rem; }
+
+    /* ---------- The big yarn button: a ball of yarn with a shop tag ---------- */
+    .maker { position: relative; display: flex; justify-content: center; padding: 0.5rem 0 1rem; }
+    .yarn-button {
+      background: none;
+      border: none;
+      padding: 0.5rem;
+      border-radius: 24px;
+      font: inherit;
+      color: var(--text);
+      cursor: pointer;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 0.5rem;
+      touch-action: manipulation; /* stops double-tap zoom on phones */
+      transition: transform 0.08s;
+    }
+    .yarn-button svg {
+      width: min(230px, 62vw);
+      height: auto;
+      filter: drop-shadow(0 8px 6px rgba(63, 42, 34, 0.25));
+      transition: transform 0.2s;
+    }
+    .yarn-button:hover svg { transform: rotate(-5deg); }
+    .yarn-button:active { transform: scale(0.95); }
+    .yarn-button .tag {
+      background: var(--tag);
+      border: 2px dashed var(--wood);
+      border-radius: 8px;
+      padding: 0.35rem 1rem;
+      font-weight: bold;
+      font-size: 1.15rem;
+    }
+    .hint { text-align: center; color: var(--muted); font-size: 0.95rem; margin: 0; }
+
+    /* ---------- Floating "+1" ---------- */
+    .plus-one {
+      position: absolute;
+      top: 35%;
+      font-weight: bold;
+      font-size: 1.5rem;
+      color: var(--yarn-dark);
+      pointer-events: none;
+      animation: float-up 0.9s ease-out forwards;
+    }
+    @keyframes float-up {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(-80px); }
+    }
+
+    /* ---------- Shop list ---------- */
+    .shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+    .helper {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.25rem 0.75rem;
+      align-items: center;
+      border: 2px dashed var(--stitch);
+      border-radius: 12px;
+      padding: 0.75rem;
+      background: #fff;
+    }
+    .helper .icon {
+      font-size: 1.6rem;
+      grid-row: span 2;
+      width: 3rem; height: 3rem;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--sage-light);
+      border-radius: 50%;
+    }
+    .helper h3 { margin: 0; font-size: 1.1rem; }
+    .helper .job { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .helper .details {
+      grid-column: 1 / -1;
+      display: flex; flex-wrap: wrap; gap: 0.5rem 1rem;
+      align-items: center; justify-content: space-between;
+      font-size: 0.95rem;
+    }
+    .helper .details span { white-space: nowrap; }
+
+    .buy-button, .plain-button {
+      font: inherit;
+      font-weight: bold;
+      border-radius: 10px;
+      padding: 0.5rem 1rem;
+      min-height: 44px; /* comfortable finger-sized target */
+      cursor: pointer;
+    }
+    .buy-button { background: var(--sage); color: #fff; border: 2px solid var(--sage); }
+    .buy-button[aria-disabled="true"] {
+      background: #f1ebe3; color: var(--muted); border-color: var(--border); cursor: not-allowed;
+    }
+    .plain-button { background: #fff; color: var(--text); border: 2px solid var(--border); }
+    .danger { color: var(--yarn-dark); border-color: var(--yarn); }
+
+    footer {
+      text-align: center; padding: 1rem 1rem 2rem; color: var(--muted);
+      display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+    }
+    footer p { margin: 0; font-size: 0.9rem; }
+
+    /* ---------- The winning purchase: the shop cat (v1.3) ---------- */
+    .helper.cat {
+      border: 3px solid var(--tag);
+      background: #fffbea;
+    }
+    .cat .won-note { grid-column: 1 / -1; margin: 0; font-weight: bold; color: var(--sage); }
+
+    /* ---------- You-won screen (v1.3) ---------- */
+    .win-dialog {
+      max-width: min(480px, calc(100vw - 2rem));
+      border: 3px solid var(--wood);
+      border-radius: var(--radius);
+      outline: 2px dashed var(--stitch);
+      outline-offset: -12px;
+      background: var(--card);
+      color: var(--text);
+      padding: 2rem 1.5rem;
+      text-align: center;
+    }
+    .win-dialog::backdrop { background: rgba(63, 42, 34, 0.6); }
+    .win-dialog .big-cat { font-size: 4rem; margin: 0; line-height: 1.1; }
+    .win-dialog h2 { font-size: 1.8rem; margin: 0.25rem 0 0.5rem; color: var(--yarn-dark); }
+    .win-dialog p { margin: 0 0 0.75rem; }
+    .win-dialog .win-time { font-size: 1.15rem; font-weight: bold; }
+    .win-buttons { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-top: 1rem; }
+
+    /* ---------- Achievements (v1.2) ---------- */
+    /* On wide screens the badge panel stretches across both columns */
+    @media (min-width: 800px) {
+      .achievements-panel { grid-column: 1 / -1; }
+    }
+    .badge-list {
+      list-style: none; margin: 0; padding: 0;
+      display: grid; gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .badge {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.75rem;
+      border-radius: 12px;
+      border: 2px dashed var(--stitch);
+      background: #f7f1e8;
+    }
+    .badge .medal {
+      flex: none;
+      width: 3.25rem; height: 3.25rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+      border-radius: 50%;
+      background: #e9e1d6;
+      border: 3px solid #cfc3b4;
+      filter: grayscale(1); /* locked badges look faded, but their text stays readable */
+    }
+    .badge h3 { margin: 0; font-size: 1.05rem; }
+    .badge p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+    .badge .status { font-weight: bold; }
+    .badge.earned { background: #fff; border-style: solid; border-color: var(--yarn); }
+    .badge.earned .medal { background: var(--tag); border-color: var(--yarn-dark); filter: none; }
+    .badge.earned .status { color: var(--sage); }
+    /* A little pop when a badge is first earned */
+    .badge.just-earned .medal { animation: badge-pop 0.6s ease-out; }
+    @keyframes badge-pop {
+      0% { transform: scale(0.6); }
+      60% { transform: scale(1.2); }
+      100% { transform: scale(1); }
+    }
+
+    /* Respect "reduce motion": no button bounce or tilt (the "+1" is skipped in JavaScript) */
+    @media (prefers-reduced-motion: reduce) {
+      .yarn-button, .yarn-button svg { transition: none; }
+      .yarn-button:active, .yarn-button:hover svg { transform: none; }
+      .badge.just-earned .medal { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="shop-name">The Cozy Skein</h1>
+    <p>A little yarn shop clicker game</p>
+    <p class="story" id="story"></p>
+  </header>
+
+  <!-- Shown only when you come back and your helpers earned yarn while you were gone -->
+  <div class="welcome" id="welcome" hidden>
+    <div class="welcome-inner">
+      <p id="welcome-text"></p>
+      <button type="button" class="plain-button" id="welcome-close">OK, thanks!</button>
+    </div>
+  </div>
+
+  <main>
+    <!-- Left side: totals and the big button -->
+    <section class="panel" aria-labelledby="maker-heading">
+      <h2 id="maker-heading" class="visually-hidden">Your yarn</h2>
+      <div class="totals">
+        <p class="yarn-count" id="yarn-count">0</p>
+        <p class="yarn-label">skeins of yarn</p>
+        <p class="rate">Making <strong id="yarn-rate">0</strong> per second</p>
+      </div>
+
+      <div class="maker" id="maker">
+        <button type="button" class="yarn-button" id="yarn-button">
+          <!-- A drawn ball of yarn: a shaded circle, wound strands, and a loose tail -->
+          <svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+            <defs>
+              <radialGradient id="yarn-shade" cx="38%" cy="32%" r="70%">
+                <stop offset="0%" stop-color="#e8939c"/>
+                <stop offset="55%" stop-color="#b4535f"/>
+                <stop offset="100%" stop-color="#7f3340"/>
+              </radialGradient>
+              <clipPath id="yarn-clip"><circle cx="100" cy="100" r="80"/></clipPath>
+            </defs>
+            <circle cx="100" cy="100" r="80" fill="url(#yarn-shade)"/>
+            <g clip-path="url(#yarn-clip)" fill="none" stroke-linecap="round">
+              <g stroke="#7f3340" stroke-width="3" opacity="0.55">
+                <ellipse cx="100" cy="100" rx="82" ry="18" transform="rotate(35 100 100)"/>
+                <ellipse cx="100" cy="100" rx="82" ry="34" transform="rotate(35 100 100)"/>
+                <ellipse cx="100" cy="100" rx="82" ry="50" transform="rotate(35 100 100)"/>
+                <ellipse cx="100" cy="100" rx="82" ry="66" transform="rotate(35 100 100)"/>
+              </g>
+              <g stroke="#f0a5ad" stroke-width="3" opacity="0.6">
+                <ellipse cx="100" cy="100" rx="82" ry="24" transform="rotate(-50 100 100)"/>
+                <ellipse cx="100" cy="100" rx="82" ry="44" transform="rotate(-50 100 100)"/>
+                <ellipse cx="100" cy="100" rx="82" ry="64" transform="rotate(-50 100 100)"/>
+              </g>
+            </g>
+            <path d="M162 142 C 184 160, 172 182, 150 178 S 118 188, 104 196"
+                  fill="none" stroke="#b4535f" stroke-width="6" stroke-linecap="round"/>
+          </svg>
+          <span class="tag">Spin a skein</span>
+        </button>
+      </div>
+      <p class="hint">Click or tap the yarn, or press Space or Enter.</p>
+      <p class="hint">All-time skeins made: <span id="total-made">0</span></p>
+    </section>
+
+    <!-- Right side: the shop of helpers -->
+    <section class="panel" aria-labelledby="shop-heading">
+      <h2 id="shop-heading">Hire helpers</h2>
+      <ul class="shop-list" id="shop-list"></ul>
+    </section>
+
+    <!-- v1.2: achievement badges -->
+    <section class="panel achievements-panel" aria-labelledby="achievements-heading">
+      <h2 id="achievements-heading">Achievements <span id="achievement-count"></span></h2>
+      <ul class="badge-list" id="badge-list"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <button type="button" class="plain-button danger" id="start-over">Start over</button>
+    <p id="save-note">Your game saves automatically in this browser.</p>
+  </footer>
+
+  <!-- v1.3: the you-won screen. A <dialog> keeps keyboard focus inside it while open,
+       and the Escape key closes it. -->
+  <dialog class="win-dialog" id="win-dialog" aria-labelledby="win-heading" aria-describedby="win-story">
+    <p class="big-cat" aria-hidden="true" id="win-emoji"></p>
+    <h2 id="win-heading">You won!</h2>
+    <p id="win-story"></p>
+    <p class="win-time" id="win-time"></p>
+    <div class="win-buttons">
+      <button type="button" class="buy-button" id="win-keep-playing">Keep playing</button>
+      <button type="button" class="plain-button danger" id="win-start-over">Start over</button>
+    </div>
+  </dialog>
+
+  <!-- Screen readers hear short messages from here (purchases, welcome back, etc.) -->
+  <div class="visually-hidden" role="status" aria-live="polite" id="announcer"></div>
+
+  <script>
+    /* =====================================================================
+       EDITABLE SETTINGS — change the game here
+       ---------------------------------------------------------------------
+       Everything you might want to tweak lives in this one object:
+       the shop name, how much one press makes, how fast prices rise,
+       and the list of helpers (cheapest first).
+
+       Helper fields:
+         id         – a short code name used in the save file. Don't change
+                      an id after people have played, or they lose that helper.
+         name       – what one helper is called
+         plural     – what several are called
+         emoji      – the little picture next to the helper
+         job        – one short sentence about what they do
+         baseCost   – price of the very first one, in skeins
+         perSecond  – skeins each one makes every second
+       ===================================================================== */
+    const SHOP_SETTINGS = {
+      shopName: "The Cozy Skein",
+      story: "Your grandmother left you her little yarn shop on Maple Street. Spin a skein, hire some help, and fill the shelves before the first snow.",
+      skeinsPerPress: 1,
+      priceGrowth: 1.15,       // each purchase makes the next one 15% more expensive
+      saveEverySeconds: 5,
+      maxAwayHours: 8,
+      saveKey: "cozy-skein-save-v1",
+
+      helpers: [
+        { id: "register", name: "Part-time employee", plural: "Part-time employees", emoji: "🧾",
+          job: "Runs the shop so you have more time to spin.", baseCost: 15, perSecond: 0.1 },
+        { id: "spinner", name: "Spinner", plural: "Spinners", emoji: "🧵",
+          job: "Sits at another wheel and makes more skeins.", baseCost: 100, perSecond: 1 },
+        { id: "farmer", name: "Local farmer", plural: "Local farmers", emoji: "🐑",
+          job: "Supplies high-quality wool from down the road.", baseCost: 1100, perSecond: 8 },
+        { id: "felter", name: "Needle-felter", plural: "Needle-felters", emoji: "🪡",
+          job: "Makes felted figurines and ornaments to sell.", baseCost: 12000, perSecond: 47 },
+        { id: "knitter", name: "Knitter", plural: "Knitters", emoji: "🧣",
+          job: "Knits sweaters, hats, and scarves to sell.", baseCost: 130000, perSecond: 260 }
+      ],
+
+      /* The final purchase that wins the game (v1.3). It appears at the bottom
+         of the shop, after the most expensive helper, and can be bought once. */
+      winningPurchase: {
+        name: "Shop cat",
+        emoji: "🐈",
+        description: "A sleepy cat to curl up in the window. Adopting one wins the game!",
+        cost: 1000000,
+        winStory: "The shop cat curls up on a basket of yarn in the sunny window. " +
+                  "The Cozy Skein is now the coziest shop in town."
+      },
+
+      /* Achievements (v1.2). Each one becomes a badge.
+         id          – a short code name used in the save file (don't change it later)
+         emoji       – the picture on the badge
+         name        – the badge title
+         description – how to earn it
+         type        – what the game checks:
+                         "anyHelper"   = you own at least `amount` helpers in total
+                         "totalMade"   = you have made at least `amount` skeins, all time
+                         "everyHelper" = you own at least `amount` of EVERY helper
+         amount      – the number to reach */
+      achievements: [
+        { id: "first-helper", emoji: "🤝", name: "First Hire",
+          description: "Hire your first helper.", type: "anyHelper", amount: 1 },
+        { id: "made-1000", emoji: "🧶", name: "A Thousand Skeins",
+          description: "Make 1,000 skeins in total.", type: "totalMade", amount: 1000 },
+        { id: "full-staff", emoji: "🏡", name: "Full Staff",
+          description: "Hire one of every helper.", type: "everyHelper", amount: 1 }
+      ],
+
+      // Words used for very big numbers, starting at one million
+      bigNumberWords: ["million", "billion", "trillion", "quadrillion", "quintillion",
+                       "sextillion", "septillion", "octillion", "nonillion", "decillion"]
+    };
+
+
+    /* ---------------------------------------------------------------------
+       GAME STATE
+       This is everything that gets saved: how much yarn you have, how much
+       you've made in total, how many of each helper you own, and when the
+       game was last saved (so we know how long you were away).
+       --------------------------------------------------------------------- */
+    function freshState() {
+      const owned = {};
+      SHOP_SETTINGS.helpers.forEach(helper => { owned[helper.id] = 0; });
+      // achievements: remembers which badges are earned, e.g. { "first-helper": true }
+      // v1.3: startedAt = when this game began; wonAt = when the cat was adopted (null = not yet)
+      return { yarn: 0, totalMade: 0, owned: owned, achievements: {},
+               startedAt: Date.now(), wonAt: null, lastSaved: Date.now() };
+    }
+    let state = freshState();
+
+
+    /* ---------------------------------------------------------------------
+       FINDING THINGS ON THE PAGE
+       Grab the page elements once so we don't have to search for them
+       every time the numbers change.
+       --------------------------------------------------------------------- */
+    const yarnCountEl  = document.getElementById("yarn-count");
+    const yarnRateEl   = document.getElementById("yarn-rate");
+    const totalMadeEl  = document.getElementById("total-made");
+    const yarnButton   = document.getElementById("yarn-button");
+    const makerEl      = document.getElementById("maker");
+    const shopListEl   = document.getElementById("shop-list");
+    const announcerEl  = document.getElementById("announcer");
+    const welcomeEl    = document.getElementById("welcome");
+    const welcomeText  = document.getElementById("welcome-text");
+    const welcomeClose = document.getElementById("welcome-close");
+    const startOverBtn = document.getElementById("start-over");
+    const badgeListEl  = document.getElementById("badge-list");
+    const badgeCountEl = document.getElementById("achievement-count");
+    const winDialog    = document.getElementById("win-dialog");
+    const winTimeEl    = document.getElementById("win-time");
+
+    document.getElementById("shop-name").textContent = SHOP_SETTINGS.shopName;
+    document.title = SHOP_SETTINGS.shopName + " — Yarn Shop Clicker";
+    // v1.1: the short story line under the shop name (edit it in SHOP_SETTINGS)
+    document.getElementById("story").textContent = SHOP_SETTINGS.story;
+
+    // Asks the computer whether the person has turned on "reduce motion"
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+
+    /* ---------------------------------------------------------------------
+       READABLE NUMBERS
+       formatNumber turns 1250000 into "1.25 million". Numbers under a
+       million just get commas, like "12,345". Fractions are dropped,
+       because you can't spend half a skein.
+       --------------------------------------------------------------------- */
+    function formatNumber(value) {
+      const n = Math.floor(value);
+      if (n < 1e6) return n.toLocaleString("en-US");
+
+      // Every 3 extra digits moves us up one word: million, billion, trillion...
+      const groupsOfThree = Math.floor(Math.log10(n) / 3);
+      const wordIndex = groupsOfThree - 2;
+      const words = SHOP_SETTINGS.bigNumberWords;
+
+      // Past the end of our word list, fall back to scientific notation
+      if (wordIndex >= words.length) return n.toExponential(2);
+
+      const shortened = n / Math.pow(1000, groupsOfThree);
+      return shortened.toLocaleString("en-US", { maximumFractionDigits: 2 }) + " " + words[wordIndex];
+    }
+
+    // The per-second rate can be small (like 0.3), so show one decimal place there
+    function formatRate(value) {
+      if (value < 1000) return (Math.round(value * 10) / 10).toLocaleString("en-US");
+      return formatNumber(value);
+    }
+
+    // Turns a number of seconds into words like "2 hours and 5 minutes".
+    // v1.3: also handles days, and shows seconds for anything under an hour.
+    function formatDuration(totalSeconds) {
+      const days = Math.floor(totalSeconds / 86400);
+      const hours = Math.floor((totalSeconds % 86400) / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = Math.floor(totalSeconds % 60);
+      const parts = [];
+      if (days > 0) parts.push(days + (days === 1 ? " day" : " days"));
+      if (hours > 0) parts.push(hours + (hours === 1 ? " hour" : " hours"));
+      if (minutes > 0) parts.push(minutes + (minutes === 1 ? " minute" : " minutes"));
+      if (days === 0 && hours === 0 && seconds > 0) {
+        parts.push(seconds + (seconds === 1 ? " second" : " seconds"));
+      }
+      if (parts.length === 0) return "less than a second";
+      if (parts.length === 1) return parts[0];
+      return parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+    }
+
+
+    /* ---------------------------------------------------------------------
+       GAME MATH
+       priceOf: the next helper costs baseCost × 1.15 for every one you own.
+       yarnPerSecond: adds up what all your helpers make each second.
+       --------------------------------------------------------------------- */
+    function priceOf(helper) {
+      return Math.ceil(helper.baseCost * Math.pow(SHOP_SETTINGS.priceGrowth, state.owned[helper.id]));
+    }
+
+    function yarnPerSecond() {
+      return SHOP_SETTINGS.helpers.reduce(
+        (sum, helper) => sum + helper.perSecond * state.owned[helper.id], 0);
+    }
+
+    // Adds yarn to your pile and to your all-time total
+    function addYarn(amount) {
+      state.yarn += amount;
+      state.totalMade += amount;
+    }
+
+    // Sends a short message to screen readers
+    // v1.2: messages that arrive at the same moment (like "welcome back" and a new
+    // badge) are joined together so the second one doesn't erase the first.
+    let waitingMessages = [];
+    let announceTimer = null;
+    function announce(message) {
+      waitingMessages.push(message);
+      announcerEl.textContent = "";
+      clearTimeout(announceTimer);
+      // A tiny delay makes screen readers notice even a repeated message
+      announceTimer = setTimeout(() => {
+        announcerEl.textContent = waitingMessages.join(" ");
+        waitingMessages = [];
+      }, 50);
+    }
+
+
+    /* ---------------------------------------------------------------------
+       BUILDING THE SHOP
+       Creates one card per helper from the SHOP_SETTINGS list. Each card
+       has the helper's name, job, how many you own, what they make, the
+       price, and a Buy button.
+       --------------------------------------------------------------------- */
+    const shopParts = {}; // remembers each card's changing pieces so we can update them
+
+    SHOP_SETTINGS.helpers.forEach(helper => {
+      const item = document.createElement("li");
+      item.className = "helper";
+      item.innerHTML = `
+        <span class="icon" aria-hidden="true">${helper.emoji}</span>
+        <h3>${helper.name}</h3>
+        <p class="job">${helper.job}</p>
+        <div class="details">
+          <span>Owned: <strong data-part="owned">0</strong></span>
+          <span>Each makes ${formatRate(helper.perSecond)}/sec</span>
+          <span>Cost: <strong data-part="cost">0</strong></span>
+          <button type="button" class="buy-button" data-part="button">Hire</button>
+        </div>`;
+      shopListEl.appendChild(item);
+
+      const button = item.querySelector('[data-part="button"]');
+      button.addEventListener("click", () => buyHelper(helper));
+
+      shopParts[helper.id] = {
+        owned: item.querySelector('[data-part="owned"]'),
+        cost: item.querySelector('[data-part="cost"]'),
+        button: button
+      };
+    });
+
+
+    /* ---------------------------------------------------------------------
+       THE SHOP CAT — the winning purchase (v1.3)
+       One last card at the bottom of the shop. Buying it wins the game and
+       opens the you-won screen. The game keeps going afterward if you like.
+       --------------------------------------------------------------------- */
+    const cat = SHOP_SETTINGS.winningPurchase;
+    const catItem = document.createElement("li");
+    catItem.className = "helper cat";
+    catItem.innerHTML = `
+      <span class="icon" aria-hidden="true">${cat.emoji}</span>
+      <h3>${cat.name}</h3>
+      <p class="job">${cat.description}</p>
+      <div class="details">
+        <span>Wins the game</span>
+        <span>Cost: <strong data-part="cost">${formatNumber(cat.cost)} skeins</strong></span>
+        <button type="button" class="buy-button" data-part="button">Adopt</button>
+      </div>
+      <p class="won-note" data-part="won" hidden></p>`;
+    shopListEl.appendChild(catItem);
+    const catButton = catItem.querySelector('[data-part="button"]');
+    const catWonNote = catItem.querySelector('[data-part="won"]');
+
+    // How long the game took, from the first moment to adopting the cat
+    function winDurationText() {
+      return formatDuration(Math.max(0, (state.wonAt - state.startedAt) / 1000));
+    }
+
+    // Fills in and opens the you-won screen
+    function showWinScreen() {
+      document.getElementById("win-emoji").textContent = cat.emoji;
+      document.getElementById("win-story").textContent = cat.winStory;
+      winTimeEl.textContent = "You won in " + winDurationText() + ".";
+      if (!winDialog.open) winDialog.showModal();
+    }
+
+    catButton.addEventListener("click", () => {
+      if (state.wonAt) {
+        showWinScreen(); // already won: just show the screen again
+        return;
+      }
+      if (state.yarn < cat.cost) {
+        announce("You need " + formatNumber(cat.cost - state.yarn) + " more skeins to adopt the " + cat.name + ".");
+        return;
+      }
+      state.yarn -= cat.cost;
+      state.wonAt = Date.now();
+      saveGame(); // save the win right away
+      render();
+      showWinScreen();
+    });
+
+    // "Keep playing" just closes the screen and goes back to the yarn
+    document.getElementById("win-keep-playing").addEventListener("click", () => {
+      winDialog.close();
+      yarnButton.focus();
+    });
+
+    // "Start over" closes the screen and uses the normal ask-twice Start over
+    document.getElementById("win-start-over").addEventListener("click", () => {
+      winDialog.close();
+      startOverBtn.click();
+    });
+
+    // Updates the cat card: its price, its button, and the "you won" note
+    function renderCat() {
+      if (state.wonAt) {
+        setText(catButton, "See my win");
+        const label = "Shop cat adopted. See your you-won screen.";
+        if (catButton.getAttribute("aria-label") !== label) catButton.setAttribute("aria-label", label);
+        catButton.setAttribute("aria-disabled", "false");
+        catWonNote.hidden = false;
+        setText(catWonNote, "Adopted! You won in " + winDurationText() + ".");
+        return;
+      }
+      catWonNote.hidden = true;
+      setText(catButton, "Adopt");
+      const canAfford = state.yarn >= cat.cost;
+      const label = "Adopt the " + cat.name + " for " + formatNumber(cat.cost) + " skeins and win the game" +
+                    (canAfford ? "" : " (not enough yarn yet)");
+      if (catButton.getAttribute("aria-label") !== label) catButton.setAttribute("aria-label", label);
+      const disabledValue = canAfford ? "false" : "true";
+      if (catButton.getAttribute("aria-disabled") !== disabledValue) {
+        catButton.setAttribute("aria-disabled", disabledValue);
+      }
+    }
+
+
+    /* ---------------------------------------------------------------------
+       ACHIEVEMENT BADGES (v1.2)
+       Builds one badge per achievement in SHOP_SETTINGS. Badges you haven't
+       earned yet look faded and say "Not earned yet".
+       --------------------------------------------------------------------- */
+    const badgeParts = {}; // remembers each badge so we can light it up later
+
+    SHOP_SETTINGS.achievements.forEach(achievement => {
+      const item = document.createElement("li");
+      item.className = "badge";
+      item.innerHTML = `
+        <span class="medal" aria-hidden="true">${achievement.emoji}</span>
+        <div>
+          <h3>${achievement.name}</h3>
+          <p>${achievement.description}</p>
+          <p class="status" data-part="status">Not earned yet</p>
+        </div>`;
+      badgeListEl.appendChild(item);
+      badgeParts[achievement.id] = { item: item, status: item.querySelector('[data-part="status"]') };
+    });
+
+    // Answers "has this achievement's goal been reached?"
+    function goalReached(achievement) {
+      const counts = SHOP_SETTINGS.helpers.map(helper => state.owned[helper.id]);
+      if (achievement.type === "anyHelper") {
+        return counts.reduce((a, b) => a + b, 0) >= achievement.amount;
+      }
+      if (achievement.type === "totalMade") {
+        return state.totalMade >= achievement.amount;
+      }
+      if (achievement.type === "everyHelper") {
+        return counts.every(count => count >= achievement.amount);
+      }
+      return false; // unknown type: never earned
+    }
+
+    // Looks for newly reached goals, marks them earned, and celebrates.
+    // `celebrate` is false when we're only drawing badges from a saved game.
+    function checkAchievements(celebrate) {
+      SHOP_SETTINGS.achievements.forEach(achievement => {
+        if (state.achievements[achievement.id]) return; // already earned
+        if (!goalReached(achievement)) return;
+        state.achievements[achievement.id] = true;
+        if (celebrate) {
+          badgeParts[achievement.id].item.classList.add("just-earned");
+          announce("Achievement earned: " + achievement.name + "!");
+          saveGame(); // save right away so a new badge is never lost
+        }
+      });
+    }
+
+    // Updates how every badge looks, plus the "(1 of 3)" count in the heading
+    function renderBadges() {
+      let earnedCount = 0;
+      SHOP_SETTINGS.achievements.forEach(achievement => {
+        const parts = badgeParts[achievement.id];
+        const earned = Boolean(state.achievements[achievement.id]);
+        if (earned) earnedCount += 1;
+        parts.item.classList.toggle("earned", earned);
+        if (!earned) parts.item.classList.remove("just-earned");
+        setText(parts.status, earned ? "Earned!" : "Not earned yet");
+      });
+      setText(badgeCountEl, "(" + earnedCount + " of " + SHOP_SETTINGS.achievements.length + ")");
+    }
+
+
+    /* ---------------------------------------------------------------------
+       BUYING A HELPER
+       If you have enough yarn, pay the price and add one helper.
+       If not, say how much more you need. (The Buy button stays
+       focusable even when you can't afford it, so keyboard users
+       don't lose their place.)
+       --------------------------------------------------------------------- */
+    function buyHelper(helper) {
+      const price = priceOf(helper);
+      if (state.yarn < price) {
+        announce("You need " + formatNumber(price - state.yarn) + " more skeins to hire a " + helper.name + ".");
+        return;
+      }
+      state.yarn -= price;
+      state.owned[helper.id] += 1;
+      const count = state.owned[helper.id];
+      announce("Hired a " + helper.name + ". You now have " + count + " " +
+               (count === 1 ? helper.name : helper.plural) + ".");
+      render();
+    }
+
+
+    /* ---------------------------------------------------------------------
+       PRESSING THE BIG YARN BUTTON
+       Makes one skein and shows a floating "+1" (unless reduce motion is on).
+       --------------------------------------------------------------------- */
+    function makeYarnByHand() {
+      addYarn(SHOP_SETTINGS.skeinsPerPress);
+      showPlusOne();
+      render();
+    }
+
+    function showPlusOne() {
+      if (reducedMotion.matches) return;
+      const bubble = document.createElement("span");
+      bubble.className = "plus-one";
+      bubble.setAttribute("aria-hidden", "true"); // decoration only
+      bubble.textContent = "+" + SHOP_SETTINGS.skeinsPerPress;
+      // Place it at a slightly random spot across the middle of the button
+      bubble.style.left = (40 + Math.random() * 20) + "%";
+      makerEl.appendChild(bubble);
+      // Clean it up once it has floated away
+      bubble.addEventListener("animationend", () => bubble.remove());
+    }
+
+    yarnButton.addEventListener("click", makeYarnByHand);
+
+    // Holding down Enter would repeat very fast — only count real presses
+    yarnButton.addEventListener("keydown", event => {
+      if (event.repeat && (event.key === "Enter" || event.key === " ")) event.preventDefault();
+    });
+
+    // If nothing on the page is focused, Space and Enter still make yarn
+    document.addEventListener("keydown", event => {
+      const nothingFocused = document.activeElement === document.body || document.activeElement === null;
+      if (!nothingFocused) return;
+      if (event.key === " " || event.key === "Enter") {
+        event.preventDefault(); // stops Space from scrolling the page
+        if (!event.repeat) makeYarnByHand();
+      }
+    });
+
+
+    /* ---------------------------------------------------------------------
+       DRAWING THE NUMBERS
+       Updates the page with the latest totals and shop prices. It only
+       changes text that actually changed, which keeps things smooth.
+       --------------------------------------------------------------------- */
+    function setText(element, text) {
+      if (element.textContent !== text) element.textContent = text;
+    }
+
+    function render() {
+      checkAchievements(true); // v1.2: any new badges?
+      renderBadges();
+      renderCat();             // v1.3: the shop cat card
+      setText(yarnCountEl, formatNumber(state.yarn));
+      setText(yarnRateEl, formatRate(yarnPerSecond()));
+      setText(totalMadeEl, formatNumber(state.totalMade));
+
+      SHOP_SETTINGS.helpers.forEach(helper => {
+        const parts = shopParts[helper.id];
+        const price = priceOf(helper);
+        const canAfford = state.yarn >= price;
+
+        setText(parts.owned, String(state.owned[helper.id]));
+        setText(parts.cost, formatNumber(price) + " skeins");
+
+        // A full spoken label for screen readers, e.g. "Hire a Spinner for 115 skeins"
+        const label = "Hire a " + helper.name + " for " + formatNumber(price) + " skeins" +
+                      (canAfford ? "" : " (not enough yarn yet)");
+        if (parts.button.getAttribute("aria-label") !== label) parts.button.setAttribute("aria-label", label);
+
+        const disabledValue = canAfford ? "false" : "true";
+        if (parts.button.getAttribute("aria-disabled") !== disabledValue) {
+          parts.button.setAttribute("aria-disabled", disabledValue);
+        }
+      });
+    }
+
+
+    /* ---------------------------------------------------------------------
+       THE GAME CLOCK
+       About 10 times a second, we check how much real time has passed and
+       let the helpers make that much yarn. Using real time means the game
+       stays fair even if the browser slows down a background tab.
+       --------------------------------------------------------------------- */
+    let lastTick = performance.now();
+    const maxGapSeconds = SHOP_SETTINGS.maxAwayHours * 3600;
+
+    setInterval(() => {
+      const now = performance.now();
+      const secondsPassed = Math.min((now - lastTick) / 1000, maxGapSeconds);
+      lastTick = now;
+      addYarn(yarnPerSecond() * secondsPassed);
+      render();
+    }, 100);
+
+
+    /* ---------------------------------------------------------------------
+       SAVING
+       Writes the game into this browser's localStorage every few seconds,
+       and again whenever you hide the tab or leave the page. Nothing ever
+       leaves your computer.
+       --------------------------------------------------------------------- */
+    function saveGame() {
+      state.lastSaved = Date.now();
+      try {
+        localStorage.setItem(SHOP_SETTINGS.saveKey, JSON.stringify(state));
+      } catch (error) {
+        // Some private browsing modes block saving; the game still works, it just won't remember
+      }
+    }
+
+    setInterval(saveGame, SHOP_SETTINGS.saveEverySeconds * 1000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") saveGame();
+    });
+    window.addEventListener("pagehide", saveGame);
+
+
+    /* ---------------------------------------------------------------------
+       LOADING
+       Reads the saved game, double-checking every number in case the save
+       is old or damaged. Then it pays you for the time you were away
+       (up to the limit in SHOP_SETTINGS) and tells you how much you earned.
+       --------------------------------------------------------------------- */
+    function safeNumber(value) {
+      return (typeof value === "number" && isFinite(value) && value >= 0) ? value : 0;
+    }
+
+    function loadGame() {
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem(SHOP_SETTINGS.saveKey));
+      } catch (error) {
+        saved = null;
+      }
+      if (!saved || typeof saved !== "object") return; // first visit: start fresh
+
+      state.yarn = safeNumber(saved.yarn);
+      state.totalMade = safeNumber(saved.totalMade);
+      SHOP_SETTINGS.helpers.forEach(helper => {
+        const count = saved.owned ? saved.owned[helper.id] : 0;
+        state.owned[helper.id] = Math.floor(safeNumber(count));
+      });
+      // v1.2: bring back earned badges (only ones that still exist in SHOP_SETTINGS)
+      SHOP_SETTINGS.achievements.forEach(achievement => {
+        if (saved.achievements && saved.achievements[achievement.id] === true) {
+          state.achievements[achievement.id] = true;
+        }
+      });
+      // v1.3: when this game started, and when (if ever) it was won.
+      // Saves from before v1.3 don't know their start time, so they start counting now.
+      state.startedAt = safeNumber(saved.startedAt) || Date.now();
+      state.wonAt = safeNumber(saved.wonAt) || null;
+
+      // Older saves (before badges existed) quietly get any badges already deserved
+      checkAchievements(false);
+
+      // How long were you gone? Capped at the maximum hours allowed.
+      const lastSaved = safeNumber(saved.lastSaved);
+      if (lastSaved === 0) return;
+      const secondsAway = Math.min(Math.max(0, (Date.now() - lastSaved) / 1000), maxGapSeconds);
+      const earned = yarnPerSecond() * secondsAway;
+
+      if (earned >= 1) {
+        addYarn(earned);
+        const capped = (Date.now() - lastSaved) / 1000 > maxGapSeconds;
+        const message = "Welcome back! While you were away for " + formatDuration(secondsAway) +
+          (capped ? " (the most your helpers will work alone)" : "") +
+          ", your helpers made " + formatNumber(earned) + " skeins.";
+        welcomeText.textContent = message;
+        welcomeEl.hidden = false;
+        announce(message);
+      }
+    }
+
+    // Closing the welcome banner moves focus back to the yarn button
+    welcomeClose.addEventListener("click", () => {
+      welcomeEl.hidden = true;
+      yarnButton.focus();
+    });
+
+
+    /* ---------------------------------------------------------------------
+       START OVER
+       Asks twice to be sure, then wipes the game back to zero.
+       --------------------------------------------------------------------- */
+    startOverBtn.addEventListener("click", () => {
+      const firstCheck = confirm("Start over? You'll lose all your yarn and helpers.");
+      if (!firstCheck) return;
+      const secondCheck = confirm("Are you really sure? This can't be undone.");
+      if (!secondCheck) return;
+
+      state = freshState();
+      welcomeEl.hidden = true;
+      if (winDialog.open) winDialog.close();
+      saveGame();
+      render();
+      announce("The shop has started over with zero yarn.");
+      yarnButton.focus();
+    });
+
+
+    /* ---------------------------------------------------------------------
+       START THE GAME
+       --------------------------------------------------------------------- */
+    loadGame();
+    render();
+    saveGame();
+  </script>
+</body>
+</html>
